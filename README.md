@@ -1,5 +1,7 @@
 # Valheim Serverside Simulations
 
+Note: As of 2026, this project is no longer maintained. If you release your own version of this mod, we kindly request that you use a different name for it.
+
 [![Build Plugin](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml/badge.svg)](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml)
 
 ![banner](https://raw.githubusercontent.com/ddormer/valheim-serverside/refs/heads/main/ss-gh.png)
