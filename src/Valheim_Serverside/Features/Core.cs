@@ -195,7 +195,15 @@ namespace Valheim_Serverside.Features
 						}
 						else if (
 							(zdoOwner == 0L
-							|| !new Traverse(__instance).Method("IsInPeerActiveArea", new object[] { zdo.GetSector(), zdo.GetOwner() }).GetValue<bool>()
+							// IsInPeerActiveArea is now (Vector3, long), not (sector, ownerId) --
+							// this call went undetected at compile time (it's reflection-based),
+							// and Harmony's Traverse doesn't throw on the mismatch, it just
+							// silently returns false. !false == true unconditionally meant this
+							// whole branch fired on every check regardless of prior ownership,
+							// so the server perpetually reclaimed every nearby persistent ZDO
+							// (including ground items) away from whoever validly held it --
+							// looked exactly like "can't pick anything up."
+							|| !new Traverse(__instance).Method("IsInPeerActiveArea", new object[] { zdo.GetPosition(), zdo.GetOwner() }).GetValue<bool>()
 							)
 							&& anyPlayerInArea
 						)
