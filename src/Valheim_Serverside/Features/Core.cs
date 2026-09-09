@@ -33,6 +33,97 @@ namespace Valheim_Serverside.Features
 			System.Diagnostics.Trace.WriteLine(string.Concat(obj));
 		}
 
+		// Defensive wrappers around Traverse. A direct method/field reference
+		// gets checked by the compiler on every game update; a Traverse-based
+		// reflection call does not -- and Traverse doesn't throw when a name
+		// or argument-type mismatch means it can't find the target, it just
+		// silently returns a default value (this is exactly how the
+		// IsInPeerActiveArea signature change went undetected until a player
+		// reported broken item pickup, with zero exceptions anywhere in the
+		// logs). These log loudly instead, so a future game update that
+		// breaks any of these calls announces itself immediately.
+		private static void LogIfMissing(bool exists, object instance, string name)
+		{
+			if (!exists)
+			{
+				ServersidePlugin.logger.LogError($"Reflection target missing/mismatched: {instance?.GetType().Name}.{name} -- the game API likely changed and this patch needs updating.");
+			}
+		}
+
+		private static Traverse SafeMethod(object instance, string name, params object[] args)
+		{
+			var t = Traverse.Create(instance).Method(name, args);
+			LogIfMissing(t.MethodExists(), instance, name);
+			return t;
+		}
+
+		private static Traverse SafeMethod(object instance, string name, Type[] paramTypes, object[] args)
+		{
+			var t = Traverse.Create(instance).Method(name, paramTypes, args);
+			LogIfMissing(t.MethodExists(), instance, name);
+			return t;
+		}
+
+		private static Traverse SafeField(object instance, string name)
+		{
+			var t = Traverse.Create(instance).Field(name);
+			LogIfMissing(t.FieldExists(), instance, name);
+			return t;
+		}
+
+		[HarmonyPatch(typeof(Pickable), "RPC_Pick")]
+		public static class Pickable_RPC_Pick_Patch
+		/*
+			RPC_Pick throws a NullReferenceException whenever it executes on a
+			headless dedicated server -- confirmed live (Exception in
+			ZRpc::HandlePackage, NullReferenceException inside RPC_Pick's own
+			DMD wrapper) and via IL disassembly of the real method body:
+			it unconditionally does `Player.m_localPlayer.GetZDOID()` to
+			attribute a pickup visual/audio effect. Player.m_localPlayer is
+			always null on a dedicated server -- there's no local player
+			there, ever, with or without this mod. Under vanilla peer-hosted
+			play this never matters, because RPC_Pick only ever runs on
+			whichever player's own client already owns the object. This mod
+			moves ownership of persistent objects (including ground items)
+			to the server, so a Pickable owned by the server is the one
+			context where RPC_Pick actually executes headless -- and always
+			crashes, silently to the player (the client just sees nothing
+			happen and keeps retrying).
+
+			Fix: a transpiler that replaces just the crashing two-instruction
+			sequence (ldsfld Player::m_localPlayer; callvirt
+			Character::GetZDOID()) with a call to a null-safe equivalent,
+			leaving 100% of the rest of vanilla's method (item drops,
+			aggravate, the RPC_SetPicked broadcast that actually removes the
+			item for everyone) untouched and unduplicated.
+		*/
+		{
+			public static ZDOID SafeLocalPlayerZDOID()
+			{
+				return Player.m_localPlayer != null ? Player.m_localPlayer.GetZDOID() : ZDOID.None;
+			}
+
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+			{
+				var m_localPlayerField = AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer));
+				var getZDOID = AccessTools.Method(typeof(Character), nameof(Character.GetZDOID));
+				var safeMethod = AccessTools.Method(typeof(Pickable_RPC_Pick_Patch), nameof(SafeLocalPlayerZDOID));
+
+				var codes = new List<CodeInstruction>(instructions);
+				for (int i = 0; i < codes.Count - 1; i++)
+				{
+					if (codes[i].opcode == OpCodes.Ldsfld && codes[i].OperandIs(m_localPlayerField)
+						&& codes[i + 1].opcode == OpCodes.Callvirt && codes[i + 1].OperandIs(getZDOID))
+					{
+						codes[i] = new CodeInstruction(OpCodes.Call, safeMethod);
+						codes.RemoveAt(i + 1);
+						break;
+					}
+				}
+				return codes;
+			}
+		}
+
 		[HarmonyPatch(typeof(ZNetScene), "CreateDestroyObjects")]
 		public class CreateDestroyObjects_Patch
 		/*
@@ -73,8 +164,8 @@ namespace Valheim_Serverside.Features
 
 				m_tempCurrentDistantObjects = m_tempCurrentDistantObjects.Distinct().ToList();
 				m_tempCurrentObjects = m_tempCurrentObjects.Distinct().ToList();
-				Traverse.Create(__instance).Method("CreateObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
-				Traverse.Create(__instance).Method("RemoveObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
+				SafeMethod(__instance, "CreateObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
+				SafeMethod(__instance, "RemoveObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
 				return false;
 			}
 		}
@@ -132,14 +223,14 @@ namespace Valheim_Serverside.Features
 					___m_updateTimer = 0f;
 					// original flag line removed, as well as the check for it as it always returns `false` on the server.
 					//bool flag = Traverse.Create(__instance).Method("CreateLocalZones", ZNet.instance.GetReferencePosition()).GetValue<bool>();
-					Traverse.Create(__instance).Method("UpdateTTL", 0.1f).GetValue();
+					SafeMethod(__instance, "UpdateTTL", 0.1f).GetValue();
 					if (ZNet.instance.IsServer()) // && !flag)
 					{
 						//Traverse.Create(__instance).Method("CreateGhostZones", ZNet.instance.GetReferencePosition()).GetValue();
 						//UnityEngine.Debug.Log(String.Concat(new object[] { "CreateLocalZones for", refPoint.x, " ", refPoint.y, " ", refPoint.z }));
 						foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
 						{
-							Traverse.Create(__instance).Method("CreateLocalZones", znetPeer.GetRefPos()).GetValue();
+							SafeMethod(__instance, "CreateLocalZones", znetPeer.GetRefPos()).GetValue();
 						}
 					}
 				}
@@ -160,7 +251,7 @@ namespace Valheim_Serverside.Features
 			static bool Prefix(ZDOMan __instance, ref Vector3 refPosition, ref long uid)
 			{
 				Vector2s zone = ZoneSystem.GetZone(refPosition);
-				List<ZDO> m_tempNearObjects = Traverse.Create(__instance).Field("m_tempNearObjects").GetValue<List<ZDO>>();
+				List<ZDO> m_tempNearObjects = SafeField(__instance, "m_tempNearObjects").GetValue<List<ZDO>>();
 				m_tempNearObjects.Clear();
 
 				// Far=0 replicates the old "near objects only" call (no separate
@@ -203,7 +294,7 @@ namespace Valheim_Serverside.Features
 							// so the server perpetually reclaimed every nearby persistent ZDO
 							// (including ground items) away from whoever validly held it --
 							// looked exactly like "can't pick anything up."
-							|| !new Traverse(__instance).Method("IsInPeerActiveArea", new object[] { zdo.GetPosition(), zdo.GetOwner() }).GetValue<bool>()
+							|| !SafeMethod(__instance, "IsInPeerActiveArea", zdo.GetPosition(), zdo.GetOwner()).GetValue<bool>()
 							)
 							&& anyPlayerInArea
 						)
@@ -314,19 +405,19 @@ namespace Valheim_Serverside.Features
 			Return spawners if there are nearby players in the event area.
 		*/
 		{
-			if (Traverse.Create(instance).Field("m_activeEvent").GetValue<RandomEvent>() == null)
+			if (SafeField(instance, "m_activeEvent").GetValue<RandomEvent>() == null)
 			{
 				return null;
 			}
 
-			ZNetView spawnSystem_m_nview = Traverse.Create(spawnSystem).Field("m_nview").GetValue<ZNetView>();
-			RandomEvent randomEvent = Traverse.Create(instance).Field("m_randomEvent").GetValue<RandomEvent>();
+			ZNetView spawnSystem_m_nview = SafeField(spawnSystem, "m_nview").GetValue<ZNetView>();
+			RandomEvent randomEvent = SafeField(instance, "m_randomEvent").GetValue<RandomEvent>();
 
 			foreach (Player player in Player.GetAllPlayers())
 			{
 				if (ZNetScene.InActiveArea(spawnSystem_m_nview.GetZDO().GetPosition(), ZoneSystem.GetZone(player.transform.position)))
 				{
-					if (Traverse.Create(instance).Method("IsInsideRandomEventArea", new Type[] { typeof(RandomEvent), typeof(Vector3) }, new object[] { randomEvent, player.transform.position }).GetValue<bool>())
+					if (SafeMethod(instance, "IsInsideRandomEventArea", new Type[] { typeof(RandomEvent), typeof(Vector3) }, new object[] { randomEvent, player.transform.position }).GetValue<bool>())
 					{
 						return instance.GetCurrentSpawners();
 					}
