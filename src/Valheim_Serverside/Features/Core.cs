@@ -63,8 +63,12 @@ namespace Valheim_Serverside.Features
 				List<ZDO> m_tempCurrentDistantObjects = new List<ZDO>();
 				foreach (ZNetPeer znetPeer in ZNet.instance.GetConnectedPeers())
 				{
-					Vector2i zone = ZoneSystem.GetZone(znetPeer.GetRefPos());
-					ZDOMan.instance.FindSectorObjects(zone, ZoneSystem.instance.m_activeArea, ZoneSystem.instance.m_activeDistantArea, m_tempCurrentObjects, m_tempCurrentDistantObjects);
+					// 1.0: ZoneSystem.GetZone now returns Vector2s (Vector2i is
+					// gone entirely), and FindSectorObjects takes a single
+					// SimulationDistance instead of separate near/far ints
+					// (ZoneSystem.m_activeArea/m_activeDistantArea no longer exist).
+					Vector2s zone = ZoneSystem.GetZone(znetPeer.GetRefPos());
+					ZDOMan.instance.FindSectorObjects(zone, ZoneSystem.instance.m_simulationDistance, m_tempCurrentObjects, m_tempCurrentDistantObjects);
 				}
 
 				m_tempCurrentDistantObjects = m_tempCurrentDistantObjects.Distinct().ToList();
@@ -78,16 +82,17 @@ namespace Valheim_Serverside.Features
 		[HarmonyPatch(typeof(ZoneSystem), "IsActiveAreaLoaded")]
 		public static class ZoneSystem_IsActiveAreaLoaded_Patch
 		{
-			private static bool Prefix(ZoneSystem __instance, ref bool __result, Dictionary<Vector2i, dynamic> ___m_zones)
+			private static bool Prefix(ZoneSystem __instance, ref bool __result, Dictionary<Vector2s, dynamic> ___m_zones)
 			{
 				foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 				{
-					Vector2i zone = ZoneSystem.GetZone(peer.GetRefPos());
-					for (int i = zone.y - __instance.m_activeArea; i <= zone.y + __instance.m_activeArea; i++)
+					Vector2s zone = ZoneSystem.GetZone(peer.GetRefPos());
+					int activeArea = __instance.m_simulationDistance.NearSimulationDistance;
+					for (int i = zone.y - activeArea; i <= zone.y + activeArea; i++)
 					{
-						for (int j = zone.x - __instance.m_activeArea; j <= zone.x + __instance.m_activeArea; j++)
+						for (int j = zone.x - activeArea; j <= zone.x + activeArea; j++)
 						{
-							if (!___m_zones.ContainsKey(new Vector2i(j, i)))
+							if (!___m_zones.ContainsKey(new Vector2s(j, i)))
 							{
 								__result = false;
 								return false;
@@ -154,11 +159,15 @@ namespace Valheim_Serverside.Features
 		{
 			static bool Prefix(ZDOMan __instance, ref Vector3 refPosition, ref long uid)
 			{
-				Vector2i zone = ZoneSystem.GetZone(refPosition);
+				Vector2s zone = ZoneSystem.GetZone(refPosition);
 				List<ZDO> m_tempNearObjects = Traverse.Create(__instance).Field("m_tempNearObjects").GetValue<List<ZDO>>();
 				m_tempNearObjects.Clear();
 
-				__instance.FindSectorObjects(zone, ZoneSystem.instance.m_activeArea, 0, m_tempNearObjects, null);
+				// Far=0 replicates the old "near objects only" call (no separate
+				// activeDistantArea param exists anymore to pass 0 for directly).
+				var currentDistance = ZoneSystem.instance.m_simulationDistance;
+				var nearOnlyDistance = new SimulationDistance(currentDistance.NearSimulationDistance, 0, currentDistance.IsClassic);
+				__instance.FindSectorObjects(zone, nearOnlyDistance, m_tempNearObjects, null);
 				foreach (ZDO zdo in m_tempNearObjects)
 				{
 					if (zdo.Persistent)
@@ -166,7 +175,11 @@ namespace Valheim_Serverside.Features
 						bool anyPlayerInArea = false;
 						foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 						{
-							if (ZNetScene.InActiveArea(zdo.GetSector(), ZoneSystem.GetZone(peer.GetRefPos())))
+							// InActiveArea no longer has a (Vector2s, Vector2s) overload --
+							// zdo.GetSector() (now Vector2s) doesn't fit the remaining
+							// (Vector3, Vector3) / (Vector3, Vector2s) signatures, so use
+							// the ZDO's actual position instead of its sector coordinate.
+							if (ZNetScene.InActiveArea(zdo.GetPosition(), ZoneSystem.GetZone(peer.GetRefPos())))
 							{
 								anyPlayerInArea = true;
 								break;
@@ -188,6 +201,8 @@ namespace Valheim_Serverside.Features
 						)
 						{
 							zdo.SetOwner(ZNet.GetUID());
+							GameObject prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
+							ServersidePlugin.logger.LogDebug($"ReleaseNearbyZDOS: Server claimed ownership of {(prefab != null ? prefab.name : $"prefab#{zdo.GetPrefab()}")} at {zdo.GetPosition()} (was owned by {zdoOwner})");
 						}
 					}
 				}
@@ -301,7 +316,7 @@ namespace Valheim_Serverside.Features
 
 			foreach (Player player in Player.GetAllPlayers())
 			{
-				if (ZNetScene.InActiveArea(spawnSystem_m_nview.GetZDO().GetSector(), player.transform.position))
+				if (ZNetScene.InActiveArea(spawnSystem_m_nview.GetZDO().GetPosition(), ZoneSystem.GetZone(player.transform.position)))
 				{
 					if (Traverse.Create(instance).Method("IsInsideRandomEventArea", new Type[] { typeof(RandomEvent), typeof(Vector3) }, new object[] { randomEvent, player.transform.position }).GetValue<bool>())
 					{
@@ -365,7 +380,10 @@ namespace Valheim_Serverside.Features
 				__result = true;
 				foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
 				{
-					if (!ZNetScene.OutsideActiveArea(point, znetPeer.GetRefPos()))
+					// OutsideActiveArea(Vector3, Vector3) is gone in 1.0 -- only
+					// (Vector3) and (Vector3, Vector2s) remain, so pass the peer's
+					// zone instead of their raw position.
+					if (!ZNetScene.OutsideActiveArea(point, ZoneSystem.GetZone(znetPeer.GetRefPos())))
 					{
 						__result = false;
 					}
