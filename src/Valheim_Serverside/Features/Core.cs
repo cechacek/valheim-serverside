@@ -33,43 +33,13 @@ namespace Valheim_Serverside.Features
 			System.Diagnostics.Trace.WriteLine(string.Concat(obj));
 		}
 
-		// Defensive wrappers around Traverse. A direct method/field reference
-		// gets checked by the compiler on every game update; a Traverse-based
-		// reflection call does not -- and Traverse doesn't throw when a name
-		// or argument-type mismatch means it can't find the target, it just
-		// silently returns a default value (this is exactly how the
-		// IsInPeerActiveArea signature change went undetected until a player
-		// reported broken item pickup, with zero exceptions anywhere in the
-		// logs). These log loudly instead, so a future game update that
-		// breaks any of these calls announces itself immediately.
-		private static void LogIfMissing(bool exists, object instance, string name)
-		{
-			if (!exists)
-			{
-				ServersidePlugin.logger.LogError($"Reflection target missing/mismatched: {instance?.GetType().Name}.{name} -- the game API likely changed and this patch needs updating.");
-			}
-		}
-
-		private static Traverse SafeMethod(object instance, string name, params object[] args)
-		{
-			var t = Traverse.Create(instance).Method(name, args);
-			LogIfMissing(t.MethodExists(), instance, name);
-			return t;
-		}
-
-		private static Traverse SafeMethod(object instance, string name, Type[] paramTypes, object[] args)
-		{
-			var t = Traverse.Create(instance).Method(name, paramTypes, args);
-			LogIfMissing(t.MethodExists(), instance, name);
-			return t;
-		}
-
-		private static Traverse SafeField(object instance, string name)
-		{
-			var t = Traverse.Create(instance).Field(name);
-			LogIfMissing(t.FieldExists(), instance, name);
-			return t;
-		}
+		/*
+			Private game members are reached directly rather than through Traverse: the
+			assembly is publicized at build time, so a renamed or re-typed member is a compile
+			error on the next game update. Traverse returns a default value when it cannot find
+			its target, which is how the 1.0 IsInPeerActiveArea signature change silently made
+			the server reclaim every ground item.
+		*/
 
 		[HarmonyPatch(typeof(Pickable), "RPC_Pick")]
 		public static class Pickable_RPC_Pick_Patch
@@ -98,29 +68,59 @@ namespace Valheim_Serverside.Features
 			item for everyone) untouched and unduplicated.
 		*/
 		{
-			public static ZDOID SafeLocalPlayerZDOID()
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
 			{
-				return Player.m_localPlayer != null ? Player.m_localPlayer.GetZDOID() : ZDOID.None;
+				return ServerSafe.NullSafeLocalPlayer(instructions, __originalMethod, expected: 1);
 			}
+		}
 
-			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
+		[HarmonyPatch(typeof(Ship), "UpdateSailSize")]
+		public static class Ship_UpdateSailSize_Patch
+		/*
+			1.0 attributes the sail-change effect to the local player:
+			`Player.m_localPlayer.GetPlayerID() == m_shipControlls.GetUser() ? Player.m_localPlayer.GetZDOID() : ZDOID.None`.
+
+			Ship.CustomFixedUpdate calls UpdateSail before its IsOwner check, so this runs for every
+			ship the server has instantiated. It throws before `m_sailWasInPosition` is updated,
+			so it throws again on every physics frame until the sail stops moving, and when the
+			server owns the ship the rest of that frame's ship physics is skipped.
+		*/
+		{
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
 			{
-				var m_localPlayerField = AccessTools.Field(typeof(Player), nameof(Player.m_localPlayer));
-				var getZDOID = AccessTools.Method(typeof(Character), nameof(Character.GetZDOID));
-				var safeMethod = AccessTools.Method(typeof(Pickable_RPC_Pick_Patch), nameof(SafeLocalPlayerZDOID));
+				return ServerSafe.NullSafeLocalPlayer(instructions, __originalMethod, expected: 2);
+			}
+		}
 
-				var codes = new List<CodeInstruction>(instructions);
-				for (int i = 0; i < codes.Count - 1; i++)
-				{
-					if (codes[i].opcode == OpCodes.Ldsfld && codes[i].OperandIs(m_localPlayerField)
-						&& codes[i + 1].opcode == OpCodes.Callvirt && codes[i + 1].OperandIs(getZDOID))
-					{
-						codes[i] = new CodeInstruction(OpCodes.Call, safeMethod);
-						codes.RemoveAt(i + 1);
-						break;
-					}
-				}
-				return codes;
+		[HarmonyPatch(typeof(CookingStation), "SpawnItem")]
+		public static class CookingStation_SpawnItem_Patch
+		/*
+			1.0 records the local player as the crafter of cooked items when `m_recordCrafter` is set.
+
+			SpawnItem runs from RPC_RemoveDoneItem on the station's owner, which is often the server
+			with this mod. It throws after the item has been instantiated but before
+			RPC_RemoveDoneItem clears the slot, so every attempt to take the food would spawn
+			another copy while the station keeps it. On the server no crafter is recorded instead.
+		*/
+		{
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+			{
+				return ServerSafe.NullSafeLocalPlayer(instructions, __originalMethod, expected: 2);
+			}
+		}
+
+		[HarmonyPatch(typeof(Leviathan), "RPC_Left")]
+		public static class Leviathan_RPC_Left_Patch
+		/*
+			1.0 increments a stat for the local player when a leviathan dives, reading
+			Player.m_localPlayer.transform unguarded. The handler is only registered on the owner,
+			which can be the server. The dive itself already happened in Leave(); only the stat
+			(meaningless on a server) is skipped.
+		*/
+		{
+			static bool Prefix()
+			{
+				return Player.m_localPlayer != null;
 			}
 		}
 
@@ -148,42 +148,66 @@ namespace Valheim_Serverside.Features
 						   frame number.
 		*/
 		{
+			private static readonly HashSet<ZDO> s_seen = new HashSet<ZDO>();
+
 			private static bool Prefix(ZNetScene __instance)
 			{
-				List<ZDO> m_tempCurrentObjects = new List<ZDO>();
-				List<ZDO> m_tempCurrentDistantObjects = new List<ZDO>();
+				// Reuses the lists vanilla uses for the same purpose instead of allocating two per call.
+				List<ZDO> currentObjects = __instance.m_tempCurrentObjects;
+				List<ZDO> currentDistantObjects = __instance.m_tempCurrentDistantObjects;
+				currentObjects.Clear();
+				currentDistantObjects.Clear();
+
+				// 1.0: one SimulationDistance replaces m_activeArea/m_activeDistantArea. Vanilla reads
+				// the synced value from ZNet here, not ZoneSystem's copy.
+				SimulationDistance distance = ZNet.instance.GetSyncedSimulationDistance();
 				foreach (ZNetPeer znetPeer in ZNet.instance.GetConnectedPeers())
 				{
-					// 1.0: ZoneSystem.GetZone now returns Vector2s (Vector2i is
-					// gone entirely), and FindSectorObjects takes a single
-					// SimulationDistance instead of separate near/far ints
-					// (ZoneSystem.m_activeArea/m_activeDistantArea no longer exist).
 					Vector2s zone = ZoneSystem.GetZone(znetPeer.GetRefPos());
-					ZDOMan.instance.FindSectorObjects(zone, ZoneSystem.instance.m_simulationDistance, m_tempCurrentObjects, m_tempCurrentDistantObjects);
+					ZDOMan.instance.FindSectorObjects(zone, distance, currentObjects, currentDistantObjects);
 				}
 
-				m_tempCurrentDistantObjects = m_tempCurrentDistantObjects.Distinct().ToList();
-				m_tempCurrentObjects = m_tempCurrentObjects.Distinct().ToList();
-				SafeMethod(__instance, "CreateObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
-				SafeMethod(__instance, "RemoveObjects", m_tempCurrentObjects, m_tempCurrentDistantObjects).GetValue();
+				RemoveDuplicates(currentObjects);
+				RemoveDuplicates(currentDistantObjects);
+				__instance.CreateObjects(currentObjects, currentDistantObjects);
+				__instance.RemoveObjects(currentObjects, currentDistantObjects);
 				return false;
+			}
+
+			// Peers' areas overlap; keeps the first occurrence like Enumerable.Distinct did.
+			private static void RemoveDuplicates(List<ZDO> zdos)
+			{
+				s_seen.Clear();
+				zdos.RemoveAll(zdo => !s_seen.Add(zdo));
 			}
 		}
 
 		[HarmonyPatch(typeof(ZoneSystem), "IsActiveAreaLoaded")]
 		public static class ZoneSystem_IsActiveAreaLoaded_Patch
+		/*
+			Vanilla checks the zones around the server's reference position; this checks them
+			around every peer, since those are the zones the server now creates.
+
+			1.0: unless the simulation distance is "classic" (the default, or `-simulationdistance`
+			0 or 2), CreateLocalZones only creates zones within a radius, not the whole square.
+			The square's corners never load in that mode, so they must be skipped here too or this
+			never returns true and the server never creates any objects.
+		*/
 		{
-			private static bool Prefix(ZoneSystem __instance, ref bool __result, Dictionary<Vector2s, dynamic> ___m_zones)
+			private static bool Prefix(ZoneSystem __instance, ref bool __result)
 			{
+				SimulationDistance distance = __instance.m_simulationDistance;
+				int near = distance.NearSimulationDistance;
 				foreach (ZNetPeer peer in ZNet.instance.GetPeers())
 				{
 					Vector2s zone = ZoneSystem.GetZone(peer.GetRefPos());
-					int activeArea = __instance.m_simulationDistance.NearSimulationDistance;
-					for (int i = zone.y - activeArea; i <= zone.y + activeArea; i++)
+					for (int i = zone.y - near; i <= zone.y + near; i++)
 					{
-						for (int j = zone.x - activeArea; j <= zone.x + activeArea; j++)
+						for (int j = zone.x - near; j <= zone.x + near; j++)
 						{
-							if (!___m_zones.ContainsKey(new Vector2s(j, i)))
+							Vector2s candidate = new Vector2s(j, i);
+							if ((distance.IsClassic || __instance.ZonesWithinRadius(zone, candidate, near))
+								&& !__instance.m_zones.ContainsKey(candidate))
 							{
 								__result = false;
 								return false;
@@ -208,31 +232,40 @@ namespace Valheim_Serverside.Features
 			Local-Zone: Created on every player's client, container for things like terrain and vegetation.
 			Ghost-Zone: Created only on the server, unsimulated (associated GameObjects are destroyed), used
 						only to send associated information to clients.
+
+			Vanilla also does three things this replacement used to drop:
+			- keeps m_lastFixedTime current (ZoneSystem.TimeSinceStart);
+			- while the server is still generating locations, creates no zones at all -- a zone
+			  generated early would permanently miss the locations meant for it;
+			- releases location prefabs whose lifetime has run out (UpdatePrefabLifetimes). Without
+			  it every location prefab the server ever loaded stayed in memory.
+			The first two frames are left to vanilla; the rest is replicated below.
 		*/
 		{
-			static bool Prefix(ZoneSystem __instance, ref float ___m_updateTimer)
+			static bool Prefix(ZoneSystem __instance)
 			{
-				if (ZNet.GetConnectionStatus() != ZNet.ConnectionStatus.Connected)
+				if (ZNet.GetConnectionStatus() != ZNet.ConnectionStatus.Connected
+					|| (ZNet.instance.IsServer() && !__instance.LocationsGenerated))
 				{
-					return false;
+					return true;
 				}
 
-				___m_updateTimer += Time.deltaTime;
-				if (___m_updateTimer > 0.1f)
+				__instance.m_lastFixedTime = Time.fixedTime;
+				__instance.m_updateTimer += Time.deltaTime;
+				if (__instance.m_updateTimer > 0.1f)
 				{
-					___m_updateTimer = 0f;
-					// original flag line removed, as well as the check for it as it always returns `false` on the server.
-					//bool flag = Traverse.Create(__instance).Method("CreateLocalZones", ZNet.instance.GetReferencePosition()).GetValue<bool>();
-					SafeMethod(__instance, "UpdateTTL", 0.1f).GetValue();
-					if (ZNet.instance.IsServer()) // && !flag)
+					__instance.m_updateTimer = 0f;
+					// Vanilla's CreateLocalZones/CreateGhostZones for ZNet.GetReferencePosition() are left out:
+					// on a dedicated server that position is outside the world.
+					__instance.UpdateTTL(0.1f);
+					if (ZNet.instance.IsServer())
 					{
-						//Traverse.Create(__instance).Method("CreateGhostZones", ZNet.instance.GetReferencePosition()).GetValue();
-						//UnityEngine.Debug.Log(String.Concat(new object[] { "CreateLocalZones for", refPoint.x, " ", refPoint.y, " ", refPoint.z }));
 						foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
 						{
-							SafeMethod(__instance, "CreateLocalZones", znetPeer.GetRefPos()).GetValue();
+							__instance.CreateLocalZones(znetPeer.GetRefPos());
 						}
 					}
+					__instance.UpdatePrefabLifetimes();
 				}
 				return false;
 			}
@@ -248,61 +281,46 @@ namespace Valheim_Serverside.Features
 			If ZDO is no longer near the peer, release ownership. If no owner set, change ownership to said peer.
 		*/
 		{
-			static bool Prefix(ZDOMan __instance, ref Vector3 refPosition, ref long uid)
+			static bool Prefix(ZDOMan __instance, Vector3 refPosition, long uid)
 			{
 				Vector2s zone = ZoneSystem.GetZone(refPosition);
-				List<ZDO> m_tempNearObjects = SafeField(__instance, "m_tempNearObjects").GetValue<List<ZDO>>();
-				m_tempNearObjects.Clear();
+				List<ZDO> nearObjects = __instance.m_tempNearObjects;
+				nearObjects.Clear();
 
-				// Far=0 replicates the old "near objects only" call (no separate
-				// activeDistantArea param exists anymore to pass 0 for directly).
-				var currentDistance = ZoneSystem.instance.m_simulationDistance;
-				var nearOnlyDistance = new SimulationDistance(currentDistance.NearSimulationDistance, 0, currentDistance.IsClassic);
-				__instance.FindSectorObjects(zone, nearOnlyDistance, m_tempNearObjects, null);
-				foreach (ZDO zdo in m_tempNearObjects)
+				// 1.0: a far distance of 0 replaces the old separate `activeDistantArea = 0` argument,
+				// i.e. near objects only, as in vanilla.
+				SimulationDistance synced = ZNet.instance.GetSyncedSimulationDistance();
+				__instance.FindSectorObjects(zone, new SimulationDistance(synced.NearSimulationDistance, 0, synced.IsClassic), nearObjects);
+
+				long serverUID = ZNet.GetUID();
+				foreach (ZDO zdo in nearObjects)
 				{
-					if (zdo.Persistent)
+					if (!zdo.Persistent)
 					{
-						bool anyPlayerInArea = false;
-						foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+						continue;
+					}
+					// 1.0: active-area checks take a position instead of a sector.
+					Vector3 position = zdo.GetPosition();
+					bool anyPlayerInArea = false;
+					foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+					{
+						if (ZNetScene.InActiveArea(position, ZoneSystem.GetZone(peer.GetRefPos())))
 						{
-							// InActiveArea no longer has a (Vector2s, Vector2s) overload --
-							// zdo.GetSector() (now Vector2s) doesn't fit the remaining
-							// (Vector3, Vector3) / (Vector3, Vector2s) signatures, so use
-							// the ZDO's actual position instead of its sector coordinate.
-							if (ZNetScene.InActiveArea(zdo.GetPosition(), ZoneSystem.GetZone(peer.GetRefPos())))
-							{
-								anyPlayerInArea = true;
-								break;
-							}
+							anyPlayerInArea = true;
+							break;
 						}
-						long zdoOwner = zdo.GetOwner();
-						if (zdoOwner == uid || zdoOwner == ZNet.GetUID())
+					}
+					long zdoOwner = zdo.GetOwner();
+					if (zdoOwner == uid || zdoOwner == serverUID)
+					{
+						if (!anyPlayerInArea)
 						{
-							if (!anyPlayerInArea)
-							{
-								zdo.SetOwner(0L);
-							}
+							zdo.SetOwner(0L);
 						}
-						else if (
-							(zdoOwner == 0L
-							// IsInPeerActiveArea is now (Vector3, long), not (sector, ownerId) --
-							// this call went undetected at compile time (it's reflection-based),
-							// and Harmony's Traverse doesn't throw on the mismatch, it just
-							// silently returns false. !false == true unconditionally meant this
-							// whole branch fired on every check regardless of prior ownership,
-							// so the server perpetually reclaimed every nearby persistent ZDO
-							// (including ground items) away from whoever validly held it --
-							// looked exactly like "can't pick anything up."
-							|| !SafeMethod(__instance, "IsInPeerActiveArea", zdo.GetPosition(), zdo.GetOwner()).GetValue<bool>()
-							)
-							&& anyPlayerInArea
-						)
-						{
-							zdo.SetOwner(ZNet.GetUID());
-							GameObject prefab = ZNetScene.instance.GetPrefab(zdo.GetPrefab());
-							ServersidePlugin.logger.LogDebug($"ReleaseNearbyZDOS: Server claimed ownership of {(prefab != null ? prefab.name : $"prefab#{zdo.GetPrefab()}")} at {zdo.GetPosition()} (was owned by {zdoOwner})");
-						}
+					}
+					else if ((zdoOwner == 0L || !__instance.IsInPeerActiveArea(position, zdoOwner)) && anyPlayerInArea)
+					{
+						zdo.SetOwner(serverUID);
 					}
 				}
 				return false;
@@ -405,22 +423,18 @@ namespace Valheim_Serverside.Features
 			Return spawners if there are nearby players in the event area.
 		*/
 		{
-			if (SafeField(instance, "m_activeEvent").GetValue<RandomEvent>() == null)
+			if (instance.m_activeEvent == null)
 			{
 				return null;
 			}
 
-			ZNetView spawnSystem_m_nview = SafeField(spawnSystem, "m_nview").GetValue<ZNetView>();
-			RandomEvent randomEvent = SafeField(instance, "m_randomEvent").GetValue<RandomEvent>();
-
+			Vector3 spawnSystemPosition = spawnSystem.m_nview.GetZDO().GetPosition();
 			foreach (Player player in Player.GetAllPlayers())
 			{
-				if (ZNetScene.InActiveArea(spawnSystem_m_nview.GetZDO().GetPosition(), ZoneSystem.GetZone(player.transform.position)))
+				if (ZNetScene.InActiveArea(spawnSystemPosition, ZoneSystem.GetZone(player.transform.position))
+					&& instance.IsInsideRandomEventArea(instance.m_randomEvent, player.transform.position))
 				{
-					if (SafeMethod(instance, "IsInsideRandomEventArea", new Type[] { typeof(RandomEvent), typeof(Vector3) }, new object[] { randomEvent, player.transform.position }).GetValue<bool>())
-					{
-						return instance.GetCurrentSpawners();
-					}
+					return instance.GetCurrentSpawners();
 				}
 			}
 			return null;
@@ -582,9 +596,12 @@ namespace Valheim_Serverside.Features
 						return false;
 					}
 					long driver = __instance.m_shipControlls.GetUser();
-					if (driver != 0L)
+					// The driver's Player can be missing on the server for a moment (not instantiated
+					// yet, or just left); keep the current owner until it shows up.
+					Player driverPlayer = driver != 0L ? Player.GetPlayer(driver) : null;
+					if (driverPlayer != null)
 					{
-						long driverID = Player.GetPlayer(driver).GetOwner();
+						long driverID = driverPlayer.GetOwner();
 						ServersidePlugin.logger.LogDebug($"UpdateOwner: Setting ship's owner to {driverID}");
 						zdo.SetOwner(driverID);
 					}

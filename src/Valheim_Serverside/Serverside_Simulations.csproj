@@ -102,6 +102,8 @@
     <Compile Include="Requirements.cs" />
     <Compile Include="FeaturesLib.cs" />
     <Compile Include="Features\Debugging.cs" />
+    <Compile Include="ServerSafe.cs" />
+    <Compile Include="VanillaDrift.cs" />
     <Compile Include="Configuration.cs" />
     <Compile Include="SequentialInstructions.cs" />
     <Compile Include="ServersidePlugin.cs" />
