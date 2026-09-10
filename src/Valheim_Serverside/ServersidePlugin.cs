@@ -5,16 +5,20 @@ using HarmonyLib;
 using PatchingLib;
 using PluginConfiguration;
 using Requirements;
+using System;
+using System.Collections.Generic;
 
 namespace Valheim_Serverside
 {
 
 	[Harmony]
-	[BepInPlugin("MVP.Valheim_Serverside_Simulations", "Serverside Simulations", "1.1.9")]
+	[BepInPlugin(PluginGUID, "Serverside Simulations", "1.1.9")]
 	[BepInDependency(ValheimPlusPluginId, BepInDependency.DependencyFlags.SoftDependency)]
 
 	public class ServersidePlugin : BaseUnityPlugin
 	{
+		// Kept from upstream so other mods that detect Serverside Simulations by GUID still do.
+		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 
 		private static ServersidePlugin context;
 
@@ -45,7 +49,7 @@ namespace Valheim_Serverside
 			}
 			Logger.LogInfo("Installing Serverside Simulations");
 
-			harmony = new Harmony("MVP.Valheim_Serverside_Simulations");
+			harmony = new Harmony(PluginGUID);
 
 			AvailableFeatures availableFeatures = new AvailableFeatures();
 			availableFeatures.AddFeature(new Features.Core());
@@ -56,9 +60,51 @@ namespace Valheim_Serverside
 			PatchRequirements patchRequirements = new PatchRequirements();
 			patchRequirements.AddRequirement(new PatchRequirement.DebugBuild());
 
-			new HarmonyFeaturesPatcher(patchRequirements).PatchAll(availableFeatures.GetAllNestedTypes(), harmony);
+			if (!PatchFeatures(availableFeatures, new HarmonyFeaturesPatcher(patchRequirements)))
+			{
+				return;
+			}
 
+			VanillaDrift.Check(Logger);
 			Logger.LogInfo("Serverside Simulations installed");
+		}
+
+		/*
+			Each feature is patched through its own Harmony instance so a failure can be undone
+			cleanly. A patch that fails usually means the game changed under it. Half of Core is
+			worse than none -- e.g. objects created around players while zones are not -- so a
+			Core failure removes every patch and leaves the server vanilla. Any other feature is
+			just switched off.
+		*/
+		private bool PatchFeatures(AvailableFeatures availableFeatures, HarmonyFeaturesPatcher patcher)
+		{
+			List<Harmony> applied = new List<Harmony>();
+			foreach (IFeature feature in availableFeatures.EnabledFeatures())
+			{
+				string featureName = feature.GetType().Name;
+				Harmony featureHarmony = new Harmony($"{PluginGUID}.{featureName}");
+				try
+				{
+					patcher.PatchAll(feature.GetType().GetNestedTypes(), featureHarmony);
+					applied.Add(featureHarmony);
+				}
+				catch (Exception e)
+				{
+					featureHarmony.UnpatchSelf();
+					if (feature is Features.Core)
+					{
+						Logger.LogError($"Core patches failed to apply; Serverside Simulations is disabled and the server runs vanilla. {e}");
+						foreach (Harmony instance in applied)
+						{
+							instance.UnpatchSelf();
+						}
+						harmony.UnpatchSelf();
+						return false;
+					}
+					Logger.LogError($"Feature {featureName} failed to apply and is disabled. {e}");
+				}
+			}
+			return true;
 		}
 
 		public bool ModIsEnabled()
