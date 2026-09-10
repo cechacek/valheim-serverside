@@ -4,7 +4,7 @@
 
 Run world and monster simulations on a **dedicated server**.
 
-**Status (1.3.0):** passed a basic live test on a Windows dedicated server running Valheim 1.0.7 with up to four players: joining, chests, picking up items, harvesting, mining and combat, with no exceptions or mod warnings. Not yet covered: Frost Foundry, sailing, raids, Deep North events and non-default `-simulationdistance`.
+**Status (1.5.0):** runs on a Windows dedicated server with Valheim 1.0.7. Basic live testing with up to four players covered joining, chests, picking up items, harvesting, mining, combat and portals, with no exceptions or mod warnings. Not yet covered: Frost Foundry, sailing, raids, Deep North events, non-default `-simulationdistance`, and the console commands under a panel that writes to standard input.
 
 Updated for patch: 1.0.7
 
