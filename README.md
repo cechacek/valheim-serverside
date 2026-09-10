@@ -2,74 +2,120 @@
 
 > **Fork of [Serverside Simulations](https://github.com/ddormer/valheim-serverside)** by ddormer, which is no longer maintained as of 2026, renamed at the original authors' request. Updated for Valheim 1.0, building on [ddormer/valheim-serverside#118](https://github.com/ddormer/valheim-serverside/pull/118) by @mreastman.
 
-Run world and monster simulations on a **dedicated server**.
+The dedicated server simulates the world — monsters, physics, ships without a driver — instead of handing each area to whichever player got there first. **Server-side only: players keep vanilla clients.**
 
-**Status (1.5.0):** runs on a Windows dedicated server with Valheim 1.0.7. Basic live testing with up to four players covered joining, chests, picking up items, harvesting, mining, combat and portals, with no exceptions or mod warnings. Not yet covered: Frost Foundry, sailing, raids, Deep North events, non-default `-simulationdistance`, and the console commands under a panel that writes to standard input.
+Updated for Valheim **1.0.7**.
 
-Updated for patch: 1.0.7
+## Why, compared to vanilla
 
-On startup the mod checks whether the vanilla methods it replaces have changed since this version was reviewed, and logs a warning naming the method if so. After a game update, look for `Vanilla ... changed` in `BepInEx/LogOutput.log`.
+In vanilla, the first player to enter an area owns it: their game runs the monster AI and physics there, and everyone else nearby sees that area through them. If that player has a poor connection or a slow PC, everyone around suffers — monsters jump around, hits land late — and updates travel from each player to the server, on to the owner and back.
 
-### Features
-- Server simulates world and AI physics.
-- Client FPS improvements
-- Ships are simulated by the driver to improve the steering experience with high latency.
+With this mod the server owns and simulates those areas:
 
-### Installation
+- Each player depends only on their own connection to the server, not on someone else's.
+- Clients no longer run AI and physics for the areas they would have owned, which helps slower PCs.
+- Ships are handed to their driver, so steering has no round trip.
 
- 1. Install BepInEx (optionally installing "Better Networking" on both clients and the server is recommended)
- 2. Copy `SarkasticEU_Dedicated_Simulation.dll` into the BepInEx/plugins/ directory on your dedicated server.
- 3. You're done! No client-side changes are needed.
+What it costs:
 
-**Upgrading from Serverside Simulations:** delete `Serverside_Simulations.dll` from BepInEx/plugins/. Both use the same plugin GUID, so only one of them can load; the config file `MVP.Valheim_Serverside_Simulations.cfg` carries over.
+- The server needs more CPU, RAM and upload than a vanilla server.
+- A player alone in an area now has their round trip to the server where vanilla would have had none. With a nearby server this is rarely noticeable.
 
+### Observed on one server
 
-_It's recommended to also install the mod "BetterNetworking", it works very well with this mod._
+Valheim 1.0.7, Windows dedicated server, up to four players, September 2026. One group's session, not a benchmark.
 
-### Configuration
+- No exceptions or mod warnings during play.
+- Items picked up from the ground: 98% of 437 on the first ownership request (1.2.0), 214 of 214 (1.5.0); the rest within 2 s.
+- The per-player send queue was full in at most 0.2% of send ticks, only in bursts such as portals.
+- About 0.8 of a CPU core on average with one player, and 15–25% of a core while empty (with the job worker cap). RAM about 1.6 GB empty, 2–2.6 GB with players, levelling off.
 
-- `[Server] ConsoleCommands` (default on) reads `save` and `stop` from the server's standard input. A vanilla server ignores its input, so panels stop it by closing or killing the process, and on Windows that skips the world save: everything since the last autosave is lost. **AMP:** set `App.ExitMethod=String` in the instance's `GenericModule.kvp` (the Valheim template already has `App.ExitString=stop`), and set `[Logging.Console] Enabled = false` in `BepInEx/config/BepInEx.cfg`, otherwise BepInEx opens its own console and takes over standard input. `save` can then be typed into the AMP console or scheduled.
-- `[Server] UnityJobWorkers` (default 8) caps Unity's job worker threads. Unity starts one per CPU core and the idle ones still use CPU; on a 24-thread machine an idle server went from 108% to 38% of a core. Only ever lowers the count; 0 leaves Unity's default.
-- `[Networking]` raises the limits on how fast the server sends world data to each player: the per-player send queue (Valheim: 10 KB, default here 48 KB) and Steam's send rate (Valheim: 150 KB/s, default here 256–1024 KB/s). Keep `SteamSendRateMinKB` × players below the server's upload speed. Every `StatsIntervalMinutes` the log shows, per player, how often their send queue was full; if that stays near 0 % the limits are not what holds you back. This is the server-side part of [BetterNetworking](https://github.com/CW-Jesse/valheim-betternetworking) by CW-Jesse (MIT); do not run both. Its compression is not included, as it needs the mod on clients too.
+Not covered yet: Frost Foundry, sailing, raids, Deep North events, a non-default `-simulationdistance`, and the console commands under a Windows server panel.
 
-- MaxObjectsPerFrame.MaxObjects can be increased to improve the loading times of areas on the server, at the expense of CPU usage.
+## What this fork adds
 
-### Caveats
+Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.md)):
+
+- **Valheim 1.0 support**, and a review of every patched method against the 1.0 code.
+- **Fixes:** location prefabs were never released (a memory leak); zones could be generated before their locations; no objects were created with a non-classic `-simulationdistance`; 1.0 errors on the server with ship sails, the Frost Foundry (which duplicated items) and leviathans; the far ring of unexplored land was not pre-generated as in vanilla, so distant trees, cliffs and the Mistlands mist appeared late.
+- **Objects nearest to a player are created first**, e.g. after a portal.
+- **Server-side networking limits** from BetterNetworking, with a per-player log of how often they are reached.
+- **Cap on Unity job worker threads**, which otherwise idle at CPU cost on many-core hosts.
+- **`save` and `stop` console commands** for server panels that write to standard input.
+- **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
+
+## Installation
+
+1. Install [BepInExPack_Valheim](https://thunderstore.io/c/valheim/p/denikson/BepInExPack_Valheim/) 5.4.2350 or newer on the dedicated server.
+2. Copy `SarkasticEU_Dedicated_Simulation.dll` from the [latest release](https://github.com/cechacek/valheim-serverside/releases/latest) into `BepInEx/plugins/`.
+3. Back up the world and restart the server. `BepInEx/LogOutput.log` should show `Sarkastic.eu Dedicated Simulation installed` and `Vanilla drift check passed`.
+
+Clients need nothing.
+
+**Upgrading from Serverside Simulations:** delete `Serverside_Simulations.dll`. Both use the same plugin GUID, so only one can load; the config file `MVP.Valheim_Serverside_Simulations.cfg` carries over.
+
+**Do not also run BetterNetworking on the server:** its server-side limits are built in.
+
+## Configuration
+
+`BepInEx/config/MVP.Valheim_Serverside_Simulations.cfg`, read at startup:
+
+| Setting | Default | |
+|---|---|---|
+| `[General] Enabled` | true | Turn the mod off without removing it. |
+| `[MaxObjectsPerFrame] MaxObjects` | 100 | Objects the server creates per frame. Higher loads areas faster at more CPU. |
+| `[Networking] QueueSizeKB` | 48 | Data queued per player before the server holds world updates for that tick (Valheim: 10). 48 KB at 20 ticks/s is about 960 KB/s, just under the send rate cap; above 80 Steam starts failing. |
+| `[Networking] SteamSendRateMinKB` / `MaxKB` | 256 / 1024 | Steam send rate per player, KB/s (Valheim: 150). Keep min × players below the server's upload. |
+| `[Networking] StatsIntervalMinutes` | 5 | How often to log, per player, how often the send queue was full. Near 0% means the limits are not what holds you back. 0 disables. |
+| `[Server] UnityJobWorkers` | 8 | Upper limit on Unity job worker threads (Unity: one per CPU core). Only ever lowers the count; 0 leaves Unity's default. |
+| `[Server] ConsoleCommands` | true | Read `save` and `stop` from standard input. `stop` saves the world before shutting down. |
+
+## Hosting notes
+
+- **After a game update**, look for `Vanilla ... changed` warnings in the log, and keep world backups.
+- **AMP (CubeCoders):**
+  - Turn off **Sleep mode** for the instance. When the server starts in under 25 s, AMP freezes it while empty, and it has been seen to die on every wake-up (`Exit code -1`, about every 2 minutes).
+  - Stopping from AMP ended the server without a world save in our tests (Windows, default `App.ExitMethod=OS_CLOSE`), so stop right after an autosave. To use the `stop` console command instead, set `App.HasWriteableConsole=True` and `App.ExitMethod=String` in the instance's `GenericModule.kvp` while the instance is stopped (AMP rewrites the file while it runs). Also set `[Logging.Console] Enabled = false` in `BepInEx.cfg`: BepInEx's own console window may otherwise take over standard input. Not yet tested under AMP.
+
+## Caveats
 
 - Only runs on dedicated servers.
-- The mod dramatically increases server resource usage and running it on a weak CPU or limited RAM may lead to a poor gameplay experience.
-- The mod should be disabled when using the "optterrain" command. 
-- This mod does not prevent cheating or any kind of client manipulation.
-- While this mod is quite light on complexity, as with most mods it's possible future Valheim patches will break the mod in unexpected ways. We recommend you back up your characters and worlds and/or consider disabling this mod anytime a new game patch is released.
+- Uses considerably more server resources than vanilla; a weak CPU or little RAM may make play worse, not better.
+- Disable the mod when using the `optterrain` command.
+- It does not prevent cheating or any kind of client manipulation.
+- Game updates can break it in unexpected ways; back up characters and worlds before updating.
 
-### Why?
+## How it works
 
-Ordinarily, to keep server resource usage low, the Valheim server will hand off simulation of an area to the first client that enters said area. However, if the player in charge of the area has a poor connection all other players in that area will suffer. This mod is an attempt at improving that specific situation at the cost of increased latency for the client which would ordinarily own the area.
-
-### How?
-
-This dedicated server mod causes terrain, monsters and other objects that are normally created and owned by clients to instead be created on—and thus owned and simulated by—the server.
+Ordinarily, to keep server resource usage low, the Valheim server hands off simulation of an area to the first client that enters it. This mod makes terrain, monsters and other objects that are normally created and owned by clients be created on — and thus owned and simulated by — the server, around every connected player.
 
 #### For mod developers - compatibility
 
 This mod keeps the plugin GUID of Serverside Simulations, `MVP.Valheim_Serverside_Simulations`, so existing checks for it keep working.
 
-For mod developers interested in maintaining compatibility:
-- If your mod makes changes relating to simulation / behaviour of the world, it will need to be able run on the dedicated server and should take these points into account:
-  - Player.m_localPlayer is always `null` on a dedicated server; your code should check for this.
-  - On a dedicated server, `ZNet.instance.GetReferencePosition()` returns a position outside of the world and is not related to any player position.
-  - Any graphical or hud-related code should probably be behind a `ZNet.instance.IsDedicated()` check, if that code is expected to run on the server.
+If your mod changes the simulation or behaviour of the world, it has to be able to run on the dedicated server:
+- `Player.m_localPlayer` is always `null` on a dedicated server; check for it.
+- On a dedicated server, `ZNet.instance.GetReferencePosition()` returns a position outside of the world, unrelated to any player.
+- Graphics or HUD code should be behind a `ZNet.instance.IsDedicated()` check if it can run on the server.
 
-### Manually compiling
+## Building
 
-To manually compile, create a file at `src/Environment.props` with the following content, and change the path to point at your Valheim install.
+Create `src/Environment.props` pointing at a Valheim dedicated server install that has BepInEx:
 
 ```
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
-    <!-- Needs to be your path to the base Valheim folder -->
+    <!-- Needs to be your path to the base Valheim dedicated server folder -->
     <VALHEIM_DEDI_INSTALL>E:\SteamLibrary\steamapps\common\Valheim dedicated server</VALHEIM_DEDI_INSTALL>
   </PropertyGroup>
 </Project>
 ```
+
+Then, from the repository root (Windows or Linux, tested with .NET SDK 10):
+
+```
+dotnet build src/Valheim_Serverside/Serverside_Simulations.csproj -c Release -p:SolutionDir=<repository root>/
+```
+
+The DLL ends up in `bin/Release/`. `SolutionDir` is needed when building the project on its own; building `Valheim_Serverside.sln` sets it.
