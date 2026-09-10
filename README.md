@@ -26,6 +26,8 @@ _It's recommended to also install the mod "BetterNetworking", it works very well
 
 ### Configuration
 
+- `[Networking]` raises the limits on how fast the server sends world data to each player: the per-player send queue (Valheim: 10 KB, default here 32 KB) and Steam's send rate (Valheim: 150 KB/s, default here 256–1024 KB/s). Keep `SteamSendRateMinKB` × players below the server's upload speed. Every `StatsIntervalMinutes` the log shows, per player, how often their send queue was full; if that stays near 0 % the limits are not what holds you back. This is the server-side part of [BetterNetworking](https://github.com/CW-Jesse/valheim-betternetworking) by CW-Jesse (MIT); do not run both. Its compression is not included, as it needs the mod on clients too.
+
 - MaxObjectsPerFrame.MaxObjects can be increased to improve the loading times of areas on the server, at the expense of CPU usage.
 
 ### Caveats

@@ -43,6 +43,10 @@
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\assembly_utils.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="assembly_valheim" Publicize="true">
       <HintPath>$(VALHEIM_DEDI_INSTALL)\valheim_server_Data\Managed\assembly_valheim.dll</HintPath>
       <Private>False</Private>
@@ -99,6 +103,7 @@
     <Compile Include="Utils.cs" />
     <Compile Include="Patching.cs" />
     <Compile Include="Features\MaxObjectsPerFrame.cs" />
+    <Compile Include="Features\Networking.cs" />
     <Compile Include="Requirements.cs" />
     <Compile Include="FeaturesLib.cs" />
     <Compile Include="Features\Debugging.cs" />
