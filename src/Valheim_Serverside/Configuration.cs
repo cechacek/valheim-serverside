@@ -27,8 +27,8 @@ namespace PluginConfiguration
 
 			networkingEnabled = config.Bind<bool>("Networking", "Enabled", true,
 				"Raise the limits on how fast the server sends world data to each player (server-side part of BetterNetworking). Needs a restart.");
-			networkQueueSizeKB = config.Bind<int>("Networking", "QueueSizeKB", 32,
-				new ConfigDescription("Data queued per player before the server stops sending world updates for that tick. Valheim: 10. Above 80 Steam starts failing.",
+			networkQueueSizeKB = config.Bind<int>("Networking", "QueueSizeKB", 48,
+				new ConfigDescription("Data queued per player before the server stops sending world updates for that tick. Valheim: 10. At 20 ticks/s, 48 KB is ~960 KB/s, just under SteamSendRateMaxKB; more needs a higher send rate too. A fuller queue delays new updates behind it. Above 80 Steam starts failing.",
 					new AcceptableValueRange<int>(10, 80)));
 			networkSendRateMinKB = config.Bind<int>("Networking", "SteamSendRateMinKB", 256,
 				new ConfigDescription("Minimum rate Steam attempts to send to each player, KB/s. Valheim: 150. Keep it below the server's upload speed divided by the number of players.",

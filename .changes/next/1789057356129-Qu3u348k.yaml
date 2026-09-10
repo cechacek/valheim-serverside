@@ -1,0 +1,6 @@
+type: change
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Default per-player send queue raised from 32 KB to 48 KB. On a live server with four players it was full in about 0.1% of send ticks, only in bursts (portals, new areas), peaking at the 32 KB limit. 48 KB at 20 ticks/s is about 960 KB/s, just under the Steam send rate cap. Existing config files keep their value.
