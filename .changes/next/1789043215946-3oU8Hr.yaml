@@ -1,0 +1,6 @@
+type: bugfix
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Fix the server never creating objects when started with a non-classic -simulationdistance (any value other than 0 or 2).

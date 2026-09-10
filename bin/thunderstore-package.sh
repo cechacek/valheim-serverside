@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SS_VERSION=$(grep -oP '(?<=\[BepInPlugin\("MVP\.Valheim_Serverside_Simulations", "Serverside Simulations", ")\d\.\d\.\d(?="\)\]$)' src/Valheim_Serverside/ServersidePlugin.cs)
+SS_VERSION=$(grep -oP '(?<=\[BepInPlugin\(PluginGUID, "Serverside Simulations", ")\d+\.\d+\.\d+(?="\)\]$)' src/Valheim_Serverside/ServersidePlugin.cs)
 
 cat > manifest.json <<- EOM
 {

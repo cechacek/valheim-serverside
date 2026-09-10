@@ -1,0 +1,6 @@
+type: bugfix
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Fix Valheim 1.0 null references on the server: ship sails changing (repeated every physics frame while the sail moved), taking items from a Frost Foundry (the item was duplicated and stayed in the station) and leviathans diving.

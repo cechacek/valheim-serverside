@@ -8,7 +8,9 @@ Note: As of 2026, this project is no longer maintained. If you release your own 
 
 Run world and monster simulations on a **dedicated server**.
 
-Updated for patch: 0.220.5
+Updated for patch: 1.0.7
+
+On startup the mod checks whether the vanilla methods it replaces have changed since this version was reviewed, and logs a warning naming the method if so. After a game update, look for `Vanilla ... changed` in `BepInEx/LogOutput.log`.
 
 ### Features
 - Server simulates world and AI physics.

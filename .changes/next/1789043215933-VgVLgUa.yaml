@@ -1,0 +1,6 @@
+type: bugfix
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Fix the ZoneSystem.Update replacement dropping vanilla behaviour: location prefabs loaded by the server were never released (a memory leak), zones were created while locations were still being generated, and ZoneSystem.TimeSinceStart stayed at zero.
