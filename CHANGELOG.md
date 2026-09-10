@@ -1,3 +1,10 @@
+## [1.3.0] - 2026-09-10
+
+### Added
+
+- Server-side networking limits from BetterNetworking (by CW-Jesse, MIT): per-player send queue 32 KB instead of 10 KB and Steam send rate 256-1024 KB/s instead of 150 KB/s, configurable under [Networking], with a periodic log of how often each player's send queue was full. Clients stay vanilla.
+
+
 ## [1.2.0] - 2026-09-10
 
 ### Changed

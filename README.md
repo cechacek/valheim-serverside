@@ -4,6 +4,8 @@
 
 Run world and monster simulations on a **dedicated server**.
 
+**Status (1.3.0):** passed a basic live test on a Windows dedicated server running Valheim 1.0.7 with up to four players: joining, chests, picking up items, harvesting, mining and combat, with no exceptions or mod warnings. Not yet covered: Frost Foundry, sailing, raids, Deep North events and non-default `-simulationdistance`.
+
 Updated for patch: 1.0.7
 
 On startup the mod checks whether the vanilla methods it replaces have changed since this version was reviewed, and logs a warning naming the method if so. After a game update, look for `Vanilla ... changed` in `BepInEx/LogOutput.log`.
