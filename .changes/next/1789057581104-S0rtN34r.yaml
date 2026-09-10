@@ -1,0 +1,6 @@
+type: feature
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  The server creates the objects nearest to a player first. It sorted them by its own reference position, which on a dedicated server lies outside the world, so after a portal or entering a new area the surroundings of a player could be the last to become active. Idea from upstream PR #100 by jsza.

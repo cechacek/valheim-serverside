@@ -182,6 +182,66 @@ namespace Valheim_Serverside.Features
 			}
 		}
 
+		[HarmonyPatch(typeof(ZNetScene), "CreateObjectsSorted")]
+		public static class ZNetScene_CreateObjectsSorted_Patch
+		/*
+			CreateObjectsSorted instantiates the objects that are not created yet, closest to
+			ZNet.GetReferencePosition() first, a limited number per frame. On a dedicated server that
+			position is outside the world, so the order was effectively arbitrary: after a portal or
+			on entering a new area, the objects next to a player could be among the last the server
+			creates and starts simulating. Sort by distance to the nearest peer instead (the idea of
+			upstream PR #100 by jsza). This orders server-side creation only; clients sort their own.
+		*/
+		{
+			private static readonly List<Vector3> s_peerPositions = new List<Vector3>();
+			private static int s_peerPositionsFrame = -1;
+
+			static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+			{
+				MethodInfo distanceSqr = AccessTools.Method(typeof(Utils), nameof(Utils.DistanceSqr), new[] { typeof(Vector3), typeof(Vector3) });
+				MethodInfo nearest = AccessTools.Method(typeof(ZNetScene_CreateObjectsSorted_Patch), nameof(NearestPeerDistanceSqr));
+				List<CodeInstruction> codes = new List<CodeInstruction>(instructions);
+				int replaced = 0;
+				foreach (CodeInstruction code in codes)
+				{
+					if (code.Calls(distanceSqr))
+					{
+						code.operand = nearest;
+						replaced++;
+					}
+				}
+				if (replaced != 1)
+				{
+					ServersidePlugin.logger.LogWarning($"{__originalMethod.DeclaringType.Name}.{__originalMethod.Name}: replaced {replaced} sort distance call(s), expected 1. The game changed this method; the patch needs reviewing.");
+				}
+				return codes;
+			}
+
+			// Same signature as the Utils.DistanceSqr call it replaces; the reference position is only a fallback.
+			public static float NearestPeerDistanceSqr(Vector3 referencePosition, Vector3 position)
+			{
+				if (s_peerPositionsFrame != Time.frameCount)
+				{
+					s_peerPositionsFrame = Time.frameCount;
+					s_peerPositions.Clear();
+					foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+					{
+						s_peerPositions.Add(peer.GetRefPos());
+					}
+				}
+				if (s_peerPositions.Count == 0)
+				{
+					return Utils.DistanceSqr(referencePosition, position);
+				}
+				float nearest = float.MaxValue;
+				foreach (Vector3 peerPosition in s_peerPositions)
+				{
+					nearest = Mathf.Min(nearest, Utils.DistanceSqr(peerPosition, position));
+				}
+				return nearest;
+			}
+		}
+
 		[HarmonyPatch(typeof(ZoneSystem), "IsActiveAreaLoaded")]
 		public static class ZoneSystem_IsActiveAreaLoaded_Patch
 		/*
@@ -240,6 +300,13 @@ namespace Valheim_Serverside.Features
 			- releases location prefabs whose lifetime has run out (UpdatePrefabLifetimes). Without
 			  it every location prefab the server ever loaded stayed in memory.
 			The first two frames are left to vanilla; the rest is replicated below.
+
+			Ghost zones: vanilla also generates ghost zones around every peer, out to the full
+			simulation distance (near + far), whenever no local zone was created that tick. The
+			replacement created local zones instead, which only reach the near distance, so in
+			unexplored land nothing existed in the far ring and clients could not show distant
+			objects there (large trees, cliffs, the Mistlands mist) until they were much closer.
+			Ghost zones are generated around peers again, as in vanilla.
 		*/
 		{
 			static bool Prefix(ZoneSystem __instance)
@@ -260,9 +327,17 @@ namespace Valheim_Serverside.Features
 					__instance.UpdateTTL(0.1f);
 					if (ZNet.instance.IsServer())
 					{
+						bool createdLocalZone = false;
 						foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
 						{
-							__instance.CreateLocalZones(znetPeer.GetRefPos());
+							createdLocalZone |= __instance.CreateLocalZones(znetPeer.GetRefPos());
+						}
+						if (!createdLocalZone)
+						{
+							foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
+							{
+								__instance.CreateGhostZones(znetPeer.GetRefPos());
+							}
 						}
 					}
 					__instance.UpdatePrefabLifetimes();
