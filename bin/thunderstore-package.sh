@@ -2,16 +2,16 @@
 
 set -euo pipefail
 
-SS_VERSION=$(grep -oP '(?<=\[BepInPlugin\("MVP\.Valheim_Serverside_Simulations", "Serverside Simulations", ")\d\.\d\.\d(?="\)\]$)' src/Valheim_Serverside/ServersidePlugin.cs)
+SS_VERSION=$(grep -oP '(?<=PluginVersion = ")\d+\.\d+\.\d+(?=";)' src/Valheim_Serverside/ServersidePlugin.cs)
 
 cat > manifest.json <<- EOM
 {
-  "name": "Serverside_Simulations",
-  "description": "Run world and monster simulations on a dedicated server.",
+  "name": "SarkasticEU_Dedicated_Simulation",
+  "description": "Run world and monster simulations on a dedicated server. Fork of Serverside Simulations, updated for Valheim 1.0.",
   "version_number": "$SS_VERSION",
-  "dependencies": ["denikson-BepInExPack_Valheim-5.4.2202"],
-  "website_url": "https://github.com/ddormer/valheim-serverside"
+  "dependencies": ["denikson-BepInExPack_Valheim-5.4.2350"],
+  "website_url": "https://github.com/cechacek/valheim-serverside"
 }
 EOM
 
-zip thunderstore-package.zip Serverside_Simulations.dll icon.png manifest.json README.md CHANGELOG.md
+zip thunderstore-package.zip SarkasticEU_Dedicated_Simulation.dll icon.png manifest.json README.md CHANGELOG.md

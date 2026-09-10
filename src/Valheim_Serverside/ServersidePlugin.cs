@@ -12,13 +12,16 @@ namespace Valheim_Serverside
 {
 
 	[Harmony]
-	[BepInPlugin(PluginGUID, "Serverside Simulations", "1.2.0")]
+	[BepInPlugin(PluginGUID, PluginName, PluginVersion)]
 	[BepInDependency(ValheimPlusPluginId, BepInDependency.DependencyFlags.SoftDependency)]
 
 	public class ServersidePlugin : BaseUnityPlugin
 	{
-		// Kept from upstream so other mods that detect Serverside Simulations by GUID still do.
+		// Kept from Serverside Simulations (the original this is forked from), so other mods that
+		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
+		public const string PluginName = "Sarkastic.eu Dedicated Simulation";
+		public const string PluginVersion = "1.2.0";
 
 		private static ServersidePlugin context;
 
@@ -39,15 +42,15 @@ namespace Valheim_Serverside
 
 			if (!ModIsEnabled())
 			{
-				Logger.LogInfo("Serverside Simulations is disabled. (configuration)");
+				Logger.LogInfo($"{PluginName} is disabled. (configuration)");
 				return;
 			}
 			else if (!IsDedicated())
 			{
-				Logger.LogInfo("Serverside Simulations is disabled. (not a dedicated server)");
+				Logger.LogInfo($"{PluginName} is disabled. (not a dedicated server)");
 				return;
 			}
-			Logger.LogInfo("Installing Serverside Simulations");
+			Logger.LogInfo($"Installing {PluginName}");
 
 			harmony = new Harmony(PluginGUID);
 
@@ -66,7 +69,7 @@ namespace Valheim_Serverside
 			}
 
 			VanillaDrift.Check(Logger);
-			Logger.LogInfo("Serverside Simulations installed");
+			Logger.LogInfo($"{PluginName} installed");
 		}
 
 		/*
@@ -93,7 +96,7 @@ namespace Valheim_Serverside
 					featureHarmony.UnpatchSelf();
 					if (feature is Features.Core)
 					{
-						Logger.LogError($"Core patches failed to apply; Serverside Simulations is disabled and the server runs vanilla. {e}");
+						Logger.LogError($"Core patches failed to apply; {PluginName} is disabled and the server runs vanilla. {e}");
 						foreach (Harmony instance in applied)
 						{
 							instance.UnpatchSelf();

@@ -1,10 +1,6 @@
-# Valheim Serverside Simulations
+# Sarkastic.eu Dedicated Simulation
 
-> **Fork.** The original project by [ddormer](https://github.com/ddormer/valheim-serverside) is no longer maintained as of 2026. This fork keeps it working on Valheim 1.0, building on [#118](https://github.com/ddormer/valheim-serverside/pull/118) by @mreastman. At the original authors' request, any public release of this fork will be published under a different name.
-
-[![Build Plugin](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml/badge.svg)](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml)
-
-![banner](https://raw.githubusercontent.com/ddormer/valheim-serverside/refs/heads/main/ss-gh.png)
+> **Fork of [Serverside Simulations](https://github.com/ddormer/valheim-serverside)** by ddormer, which is no longer maintained as of 2026, renamed at the original authors' request. Updated for Valheim 1.0, building on [ddormer/valheim-serverside#118](https://github.com/ddormer/valheim-serverside/pull/118) by @mreastman.
 
 Run world and monster simulations on a **dedicated server**.
 
@@ -20,11 +16,13 @@ On startup the mod checks whether the vanilla methods it replaces have changed s
 ### Installation
 
  1. Install BepInEx (optionally installing "Better Networking" on both clients and the server is recommended)
- 2. Copy plugin DLL into the BepInEx/plugins/ directory on your dedicated server.
+ 2. Copy `SarkasticEU_Dedicated_Simulation.dll` into the BepInEx/plugins/ directory on your dedicated server.
  3. You're done! No client-side changes are needed.
 
+**Upgrading from Serverside Simulations:** delete `Serverside_Simulations.dll` from BepInEx/plugins/. Both use the same plugin GUID, so only one of them can load; the config file `MVP.Valheim_Serverside_Simulations.cfg` carries over.
 
-_It's recommended to also install the mod "BetterNetworking", it works very well with Serverside Simulations._
+
+_It's recommended to also install the mod "BetterNetworking", it works very well with this mod._
 
 ### Configuration
 
@@ -46,9 +44,11 @@ Ordinarily, to keep server resource usage low, the Valheim server will hand off 
 
 This dedicated server mod causes terrain, monsters and other objects that are normally created and owned by clients to instead be created on—and thus owned and simulated by—the server.
 
-#### For mod developers - compatibility with Serverside Simulations
+#### For mod developers - compatibility
 
-For mod developers interested in maintaining compatibility with Serverside Simulations:
+This mod keeps the plugin GUID of Serverside Simulations, `MVP.Valheim_Serverside_Simulations`, so existing checks for it keep working.
+
+For mod developers interested in maintaining compatibility:
 - If your mod makes changes relating to simulation / behaviour of the world, it will need to be able run on the dedicated server and should take these points into account:
   - Player.m_localPlayer is always `null` on a dedicated server; your code should check for this.
   - On a dedicated server, `ZNet.instance.GetReferencePosition()` returns a position outside of the world and is not related to any player position.
