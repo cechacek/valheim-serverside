@@ -1,0 +1,6 @@
+type: bugfix
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Update for Valheim 1.0 (Vector2s zones and SimulationDistance). Based on ddormer/valheim-serverside#118 by @mreastman, which also fixed item pickup and the Pickable.RPC_Pick null reference.

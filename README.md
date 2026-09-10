@@ -1,6 +1,6 @@
 # Valheim Serverside Simulations
 
-Note: As of 2026, this project is no longer maintained. If you release your own version of this mod, we kindly request that you use a different name for it.
+> **Fork.** The original project by [ddormer](https://github.com/ddormer/valheim-serverside) is no longer maintained as of 2026. This fork keeps it working on Valheim 1.0, building on [#118](https://github.com/ddormer/valheim-serverside/pull/118) by @mreastman. At the original authors' request, any public release of this fork will be published under a different name.
 
 [![Build Plugin](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml/badge.svg)](https://github.com/ddormer/valheim-serverside/actions/workflows/build-plugin.yml)
 
@@ -8,7 +8,9 @@ Note: As of 2026, this project is no longer maintained. If you release your own 
 
 Run world and monster simulations on a **dedicated server**.
 
-Updated for patch: 0.220.5
+Updated for patch: 1.0.7
+
+On startup the mod checks whether the vanilla methods it replaces have changed since this version was reviewed, and logs a warning naming the method if so. After a game update, look for `Vanilla ... changed` in `BepInEx/LogOutput.log`.
 
 ### Features
 - Server simulates world and AI physics.

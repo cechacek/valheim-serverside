@@ -1,0 +1,6 @@
+type: change
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Game members are accessed directly instead of through Traverse, so game updates that rename them fail the build instead of silently doing nothing. If a Core patch fails to apply the mod now removes all its patches and the server runs vanilla. A startup check logs a warning when a vanilla method replaced by the mod has changed since it was last reviewed.
