@@ -15,6 +15,9 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> networkSendRateMaxKB;
 		public static ConfigEntry<int> networkStatsMinutes;
 
+		public static ConfigEntry<bool> consoleCommandsEnabled;
+		public static ConfigEntry<int> unityJobWorkers;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -35,6 +38,11 @@ namespace PluginConfiguration
 					new AcceptableValueRange<int>(64, 4096)));
 			networkStatsMinutes = config.Bind<int>("Networking", "StatsIntervalMinutes", 5,
 				"Every this many minutes, log per player how often their send queue was full. 0 disables.");
+
+			consoleCommandsEnabled = config.Bind<bool>("Server", "ConsoleCommands", true,
+				"Read `save` and `stop` from standard input, so a server panel can save or shut down cleanly. In AMP set App.ExitMethod=String and App.ExitString=stop. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
+				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
 		}
 	}
 }

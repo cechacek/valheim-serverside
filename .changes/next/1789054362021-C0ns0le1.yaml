@@ -1,0 +1,6 @@
+type: feature
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Console commands on standard input: `save` saves the world, `stop` saves and shuts down cleanly. Lets server panels such as AMP stop the server without losing progress since the last autosave (AMP: App.ExitMethod=String, BepInEx console disabled).

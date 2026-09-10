@@ -1,0 +1,6 @@
+type: feature
+section: null
+issues: {}
+feature_flags: []
+description: |-
+  Cap Unity job worker threads at 8 (`[Server] UnityJobWorkers`). Unity starts one per CPU core and idle ones still use CPU; an idle server on a 24-thread machine went from 108% to 38% of a core.
