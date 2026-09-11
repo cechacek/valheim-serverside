@@ -21,7 +21,7 @@ namespace Valheim_Serverside.Features
 	{
 		public bool FeatureEnabled()
 		{
-			return Configuration.sendIntervalMs.Value > 0 || Configuration.performanceStatsMinutes.Value > 0;
+			return Configuration.sendIntervalMs.Value > 0 || Configuration.performanceStatsMinutes.Value > 0 || Configuration.serverTargetFps.Value > 0;
 		}
 
 		[HarmonyPatch(typeof(ZDOMan), "SendZDOToPeers2")]
@@ -82,6 +82,34 @@ namespace Valheim_Serverside.Features
 			static void Postfix()
 			{
 				PerformanceStats.SendFinished();
+			}
+		}
+
+		/*
+			The game asks for 30 FPS on a dedicated server (GraphicsSettingsManager.RequestTargetFrameRateFromPreset),
+			so a frame finished in 12 ms still lasts 33 ms. Every request that goes through here on a
+			dedicated server is replaced by the configured rate; below 30 the game would treat the value
+			as "no limit" and spin a core at full speed, so that is the floor.
+		*/
+		[HarmonyPatch(typeof(PresentManager), "RequestTargetFrameRate")]
+		public static class PresentManager_RequestTargetFrameRate_Patch
+		{
+			private static int s_logged;
+
+			static void Prefix(ref int value)
+			{
+				int fps = Configuration.serverTargetFps.Value;
+				// Called before ZNet exists (GraphicsSettingsManager.Awake), so the plugin's own check is used.
+				if (fps <= 0 || !ServersidePlugin.IsDedicated())
+				{
+					return;
+				}
+				int wanted = Mathf.Clamp(fps, 30, 240);
+				if (s_logged++ == 0 || wanted != value)
+				{
+					ServersidePlugin.logger.LogInfo($"Server target frame rate: {value} -> {wanted}");
+				}
+				value = wanted;
 			}
 		}
 

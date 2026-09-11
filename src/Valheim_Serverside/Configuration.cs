@@ -22,6 +22,7 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> maxCatchUpMs;
 		public static ConfigEntry<int> maxZonesPerTick;
 		public static ConfigEntry<int> performanceStatsMinutes;
+		public static ConfigEntry<int> serverTargetFps;
 
 		public static void Load(ConfigFile config)
 		{
@@ -58,6 +59,9 @@ namespace PluginConfiguration
 			maxZonesPerTick = config.Bind<int>("Performance", "MaxZonesPerTick", 1,
 				new ConfigDescription("Most new zones the server generates per zone tick (10 ticks a second), shared by all players in turn. A new zone is generated in full in one frame, so several players exploring at once used to cost one zone each in the same frame. 0 = one per player per tick, as before.",
 					new AcceptableValueRange<int>(0, 100)));
+			serverTargetFps = config.Bind<int>("Performance", "ServerTargetFps", 60,
+				new ConfigDescription("Frame rate the server aims for. The game sets a dedicated server to 30, so even with time to spare a frame waits 33 ms; every reaction to a player (a hit, a felled tree) waits for a server frame. 60 halves that wait whenever the server has the headroom, and costs nothing when it has not. Needs a restart. 0 keeps the game's 30.",
+					new AcceptableValueRange<int>(0, 240)));
 			performanceStatsMinutes = config.Bind<int>("Performance", "StatsIntervalMinutes", 5,
 				"Every this many minutes, log frame times, physics steps per frame, the cost of sending world updates and of generating zones. 0 disables.");
 		}

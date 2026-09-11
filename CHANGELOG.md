@@ -1,3 +1,10 @@
+## [1.7.0] - 2026-09-11
+
+### Added
+
+- `[Performance] ServerTargetFps` (60): the game sets a dedicated server to 30 FPS, so a frame finished in 12 ms still lasts 33 ms and every reaction to a player waits for it. Measured on the live server with one player: 30 FPS at a median frame of 35 ms while the game logic took a fraction of that. 60 halves the wait whenever the server has the headroom and changes nothing under load. 0 keeps the game's 30.
+
+
 ## [1.6.0] - 2026-09-11
 
 ### Added
