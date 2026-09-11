@@ -8,6 +8,7 @@ using Requirements;
 using System;
 using System.Collections.Generic;
 using Unity.Jobs.LowLevel.Unsafe;
+using UnityEngine;
 
 namespace Valheim_Serverside
 {
@@ -22,7 +23,7 @@ namespace Valheim_Serverside
 		// detect it by GUID still do and the two cannot be loaded side by side.
 		public const string PluginGUID = "MVP.Valheim_Serverside_Simulations";
 		public const string PluginName = "Sarkastic.eu Dedicated Simulation";
-		public const string PluginVersion = "1.5.0";
+		public const string PluginVersion = "1.6.0";
 
 		private static ServersidePlugin context;
 
@@ -55,6 +56,7 @@ namespace Valheim_Serverside
 
 			// Independent of the patches, so they stay on even if Core fails to apply and the server runs vanilla.
 			LimitJobWorkers(Configuration.unityJobWorkers.Value);
+			LimitPhysicsCatchUp(Configuration.maxCatchUpMs.Value);
 			if (Configuration.consoleCommandsEnabled.Value)
 			{
 				ServerConsole.Start();
@@ -67,6 +69,7 @@ namespace Valheim_Serverside
 			availableFeatures.AddFeature(new Features.Core());
 			availableFeatures.AddFeature(new Features.MaxObjectsPerFrame());
 			availableFeatures.AddFeature(new Features.Networking());
+			availableFeatures.AddFeature(new Features.Performance());
 			availableFeatures.AddFeature(new Features.Debugging());
 			availableFeatures.AddFeature(new Features.Compat_ValheimPlus());
 
@@ -79,16 +82,30 @@ namespace Valheim_Serverside
 			}
 
 			VanillaDrift.Check(Logger);
+			installed = true;
 			Logger.LogInfo($"{PluginName} installed");
 		}
 
 		private static bool consoleStarted;
+		private static bool installed;
 
 		private void Update()
 		{
 			if (consoleStarted)
 			{
 				ServerConsole.ProcessPending();
+			}
+			if (installed)
+			{
+				Features.PerformanceStats.Frame();
+			}
+		}
+
+		private void FixedUpdate()
+		{
+			if (installed)
+			{
+				Features.PerformanceStats.FixedStep();
 			}
 		}
 
@@ -106,6 +123,25 @@ namespace Valheim_Serverside
 			}
 			JobsUtility.JobWorkerCount = limit;
 			Logger.LogInfo($"Unity job worker threads: {current} -> {JobsUtility.JobWorkerCount}");
+		}
+
+		/*
+			After a slow frame Unity runs the fixed update -- physics and, in Valheim, every character,
+			creature AI and synced object (MonoUpdaters.FixedUpdate) -- once per fixed step it fell
+			behind, up to the maximum allowed timestep: Valheim ships 200 ms, 10 steps. On a server
+			that already has little headroom, the catch-up makes the next frame slow as well. A lower
+			limit ends that spiral; the price is game time running slightly slow during such frames.
+		*/
+		private void LimitPhysicsCatchUp(int milliseconds)
+		{
+			if (milliseconds <= 0)
+			{
+				return;
+			}
+			float before = Time.maximumDeltaTime;
+			Time.maximumDeltaTime = Mathf.Max(milliseconds / 1000f, Time.fixedDeltaTime);
+			Logger.LogInfo($"Physics catch-up: at most {Mathf.RoundToInt(Time.maximumDeltaTime / Time.fixedDeltaTime)} fixed steps per frame "
+				+ $"(fixed step {1000 * Time.fixedDeltaTime:0} ms, longest frame counted {1000 * before:0} -> {1000 * Time.maximumDeltaTime:0} ms)");
 		}
 
 		/*

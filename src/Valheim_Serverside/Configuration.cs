@@ -18,6 +18,11 @@ namespace PluginConfiguration
 		public static ConfigEntry<bool> consoleCommandsEnabled;
 		public static ConfigEntry<int> unityJobWorkers;
 
+		public static ConfigEntry<int> sendIntervalMs;
+		public static ConfigEntry<int> maxCatchUpMs;
+		public static ConfigEntry<int> maxZonesPerTick;
+		public static ConfigEntry<int> performanceStatsMinutes;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -43,6 +48,18 @@ namespace PluginConfiguration
 				"Read `save` and `stop` from standard input, so a server panel can save or shut down cleanly. In AMP set App.ExitMethod=String and App.ExitString=stop. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
+
+			sendIntervalMs = config.Bind<int>("Performance", "SendIntervalMs", 100,
+				new ConfigDescription("How often each player is sent world updates, in real milliseconds. Valheim sends to one player per frame, so each player waits players+1 frames: at 15 FPS with 4 players ~330 ms. Every send builds that player's list of nearby objects, so shorter intervals cost server CPU. 0 keeps Valheim's behaviour.",
+					new AcceptableValueRange<int>(0, 1000)));
+			maxCatchUpMs = config.Bind<int>("Performance", "MaxCatchUpMs", 100,
+				new ConfigDescription("Longest frame the server counts in full (Unity's maximum allowed timestep). After a slow frame Unity runs physics and every creature's fixed update again for each 20 ms it fell behind; Valheim allows 200 ms (10 steps), 100 caps it at 5, so one slow frame does not make the next one slow too. Game time runs slightly slower during such frames. Needs a restart. 0 keeps the game's setting.",
+					new AcceptableValueRange<int>(0, 1000)));
+			maxZonesPerTick = config.Bind<int>("Performance", "MaxZonesPerTick", 1,
+				new ConfigDescription("Most new zones the server generates per zone tick (10 ticks a second), shared by all players in turn. A new zone is generated in full in one frame, so several players exploring at once used to cost one zone each in the same frame. 0 = one per player per tick, as before.",
+					new AcceptableValueRange<int>(0, 100)));
+			performanceStatsMinutes = config.Bind<int>("Performance", "StatsIntervalMinutes", 5,
+				"Every this many minutes, log frame times, physics steps per frame, the cost of sending world updates and of generating zones. 0 disables.");
 		}
 	}
 }

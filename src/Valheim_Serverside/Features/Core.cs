@@ -1,5 +1,6 @@
 using FeaturesLib;
 using HarmonyLib;
+using PluginConfiguration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -327,22 +328,42 @@ namespace Valheim_Serverside.Features
 					__instance.UpdateTTL(0.1f);
 					if (ZNet.instance.IsServer())
 					{
-						bool createdLocalZone = false;
-						foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
-						{
-							createdLocalZone |= __instance.CreateLocalZones(znetPeer.GetRefPos());
-						}
-						if (!createdLocalZone)
-						{
-							foreach (ZNetPeer znetPeer in ZNet.instance.GetPeers())
-							{
-								__instance.CreateGhostZones(znetPeer.GetRefPos());
-							}
-						}
+						long started = System.Diagnostics.Stopwatch.GetTimestamp();
+						List<ZNetPeer> peers = ZNet.instance.GetPeers();
+						int local = SpawnZones(__instance, peers, ghost: false);
+						int ghosts = local == 0 ? SpawnZones(__instance, peers, ghost: true) : 0;
+						PerformanceStats.Zones(local, ghosts, started);
 					}
 					__instance.UpdatePrefabLifetimes();
 				}
 				return false;
+			}
+
+			private static int s_nextPeer;
+
+			/*
+				Each call generates at most one zone, for that peer. A new zone is generated in full
+				in one frame (terrain, vegetation, locations), so one zone per exploring player in the
+				same tick was a spike. At most MaxZonesPerTick are generated per tick, the peers taking
+				turns from the one after the last served. A peer skipped for a tick loses nothing: its
+				zones live 4 s without a refresh (m_zoneTTL) and it comes up at least every N ticks.
+			*/
+			private static int SpawnZones(ZoneSystem zoneSystem, List<ZNetPeer> peers, bool ghost)
+			{
+				int budget = Configuration.maxZonesPerTick.Value > 0 ? Configuration.maxZonesPerTick.Value : int.MaxValue;
+				int count = peers.Count;
+				int spawned = 0;
+				for (int n = 0; n < count && spawned < budget; n++)
+				{
+					int index = (s_nextPeer + n) % count;
+					Vector3 position = peers[index].GetRefPos();
+					if (ghost ? zoneSystem.CreateGhostZones(position) : zoneSystem.CreateLocalZones(position))
+					{
+						spawned++;
+						s_nextPeer = (index + 1) % count;
+					}
+				}
+				return spawned;
 			}
 		}
 

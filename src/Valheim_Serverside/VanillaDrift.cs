@@ -43,6 +43,9 @@ namespace Valheim_Serverside
 				"ZDOMan::FindSectorObjects", "ZDOMan::IsInPeerActiveArea", "ZNet::GetSyncedSimulationDistance", "ZNet::get_instance",
 				"ZNetScene::InActiveArea", "ZoneSystem::GetZone",
 			} },
+			{ AccessTools.Method(typeof(ZDOMan), "SendZDOToPeers2"), new[] {
+				"ZDOMan::SendZDOs",
+			} },
 			{ AccessTools.Method(typeof(Ship), "UpdateOwner"), new[] {
 				"Ship::GetNewOwnerID", "Ship::IsPlayerInBoat", "Ship::RefreshPlayerList", "ZDO::SetOwner",
 				"ZLog::Log", "ZNetView::GetZDO", "ZNetView::IsOwner", "ZNetView::IsValid",

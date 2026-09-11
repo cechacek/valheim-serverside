@@ -41,6 +41,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Objects nearest to a player are created first**, e.g. after a portal.
 - **Server-side networking limits** from BetterNetworking, with a per-player log of how often they are reached.
 - **Cap on Unity job worker threads**, which otherwise idle at CPU cost on many-core hosts.
+- **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
 
@@ -69,6 +70,10 @@ Clients need nothing.
 | `[Networking] StatsIntervalMinutes` | 5 | How often to log, per player, how often the send queue was full. Near 0% means the limits are not what holds you back. 0 disables. |
 | `[Server] UnityJobWorkers` | 8 | Upper limit on Unity job worker threads (Unity: one per CPU core). Only ever lowers the count; 0 leaves Unity's default. |
 | `[Server] ConsoleCommands` | true | Read `save` and `stop` from standard input. `stop` saves the world before shutting down. |
+| `[Performance] SendIntervalMs` | 100 | How often each player gets world updates. Valheim serves one player per frame, so with N players each waits N+1 frames (330 ms at 15 FPS with 4 players). Each send costs server CPU; see the performance log. 0 keeps Valheim's behaviour. |
+| `[Performance] MaxCatchUpMs` | 100 | Longest frame counted in full. After a slow frame Unity reruns physics and every creature's fixed update for each 20 ms missed (Valheim allows 200 ms, 10 times); 100 caps it at 5. Game time runs slightly slow during such frames. 0 keeps the game's setting. |
+| `[Performance] MaxZonesPerTick` | 1 | New zones generated per zone tick (10 per second), players taking turns. 0 = one per player per tick, as before. |
+| `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, and the cost of world updates and zone generation while players are online. 0 disables. |
 
 ## Hosting notes
 
