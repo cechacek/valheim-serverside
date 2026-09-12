@@ -82,7 +82,7 @@ Clients need nothing.
 ## Hosting notes
 
 - **After a game update**, look for `Vanilla ... changed` warnings in the log, and keep world backups.
-- Running under a server panel? See [Running on AMP (CubeCoders)](#running-on-amp-cubecoders) at the end.
+- Running under AMP (CubeCoders)? Settings and pitfalls (Sleep mode, stop without save, console commands) are in [cechacek/amp-valheim-bepinex](https://github.com/cechacek/amp-valheim-bepinex).
 
 ## Caveats
 
@@ -126,12 +126,3 @@ dotnet build src/Valheim_Serverside/Serverside_Simulations.csproj -c Release -p:
 ```
 
 The DLL ends up in `bin/Release/`. `SolutionDir` is needed when building the project on its own; building `Valheim_Serverside.sln` sets it.
-
-## Running on AMP (CubeCoders)
-
-Notes for [AMP by CubeCoders](https://cubecoders.com/AMP) with its stock Valheim instance template ([CubeCoders/AMPTemplates](https://github.com/CubeCoders/AMPTemplates)). Observed on AMP 2.8 on Windows; not needed on other hosts.
-
-- **Install:** enable *Install BepInEx* (Configuration → Updates), run *Update*, then copy the DLL into `<instance>\Valheim\896660\BepInEx\plugins\`.
-- **Turn off Sleep mode** for the instance. AMP only enables it when the server starts in under 25 s (see the AMP log: "Sleep will not be available" otherwise). While the server was empty, AMP froze it, and on every wake-up from a Steam query it died (`The application stopped unexpectedly. Exit code -1`), about every 2 minutes, without any log line from the game.
-- **Stop does not save the world.** With the template's default `App.ExitMethod=OS_CLOSE`, stopping from AMP ended the server after the 30 s exit timeout without a world save, so everything since the last autosave was lost. Stop right after an autosave, or lower the save interval.
-- **To type commands into the AMP console (`give`, `players`, `save`) and to stop cleanly with `stop`:** stop the instance, then in `<instance>\GenericModule.kvp` set `App.HasWriteableConsole=True` (the template has `False`, so AMP sends nothing to the game) and `App.ExitMethod=String` (the template already has `App.ExitString=stop`). Edit only while the instance is stopped: AMP writes its in-memory settings back to this file. Also set `[Logging.Console] Enabled = false` in `BepInEx/config/BepInEx.cfg`, since BepInEx's own console window may otherwise take over standard input. `save` can then also be scheduled. This setup is not yet tested under AMP.
