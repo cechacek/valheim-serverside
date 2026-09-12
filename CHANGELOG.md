@@ -1,3 +1,10 @@
+## [1.9.0] - 2026-09-12
+
+### Fixed
+
+- `[Fixes] SaveClientChanges`: Valheim 1.0 saves only the world chunks it marked as changed, and a change that arrives from a player for an object the player owns marks nothing, so the new state lived only in memory until something else in that chunk changed. The chunk is now marked when such a change arrives. With this mod the server owns nearly everything near players, so the window was small: what a player just built, the ship they steer, their drops. Reported for 1.0 by ValheimCommunityPatch.
+
+
 ## [1.8.0] - 2026-09-11
 
 ### Added

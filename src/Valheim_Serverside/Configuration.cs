@@ -24,6 +24,8 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> performanceStatsMinutes;
 		public static ConfigEntry<int> serverTargetFps;
 
+		public static ConfigEntry<bool> fixSaveClientChanges;
+
 		public static ConfigEntry<bool> adminChatEnabled;
 		public static ConfigEntry<string> adminChatPrefix;
 		public static ConfigEntry<int> adminChatMaxGive;
@@ -68,6 +70,9 @@ namespace PluginConfiguration
 					new AcceptableValueRange<int>(0, 240)));
 			performanceStatsMinutes = config.Bind<int>("Performance", "StatsIntervalMinutes", 5,
 				"Every this many minutes, log frame times, physics steps per frame, the cost of sending world updates and of generating zones. 0 disables.");
+
+			fixSaveClientChanges = config.Bind<bool>("Fixes", "SaveClientChanges", true,
+				"Mark a world chunk as changed when a player's own change to an object arrives, so the next save writes it. Valheim 1.0 only rewrites changed chunks and does not count changes received from players, so what a player just built or moved could be missing after a restart.");
 
 			adminChatEnabled = config.Bind<bool>("AdminChat", "Enabled", false,
 				"Let admins (adminlist.txt) run commands by shouting them in chat: /give <item> [amount], /save, /help; replies go to their console (F5). Valheim 1.0 does not let a player on a dedicated server use spawn from the console, admin or not. Off by default: the server console has the same commands (give <item> <amount> <player>, players, save) for the panel the server runs in.");
