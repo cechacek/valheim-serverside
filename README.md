@@ -41,6 +41,7 @@ Compared to Serverside Simulations 1.1.9 (details in the [changelog](CHANGELOG.m
 - **Objects nearest to a player are created first**, e.g. after a portal.
 - **Server-side networking limits** from BetterNetworking, with a per-player log of how often they are reached.
 - **Cap on Unity job worker threads**, which otherwise idle at CPU cost on many-core hosts.
+- **Admin commands in chat:** `/give <item> [amount]` and `/save`, shouted by an admin, carried out by the server. Valheim 1.0 does not let a player on a dedicated server use `spawn` from the console, admin or not.
 - **Smoother server frames:** world updates reach every player at a steady interval however many are online, one slow frame no longer makes the next one slow through physics catch-up, and new zones are generated one per tick instead of one per exploring player. A periodic log shows frame times and what they are spent on.
 - **`save` and `stop` console commands** for server panels that write to standard input.
 - **Safety:** a startup check warns when a vanilla method the mod replaces has changed in a game update; if the core patches cannot be applied, the mod removes itself and the server runs vanilla.
@@ -74,7 +75,9 @@ Clients need nothing.
 | `[Performance] MaxCatchUpMs` | 100 | Longest frame counted in full. After a slow frame Unity reruns physics and every creature's fixed update for each 20 ms missed (Valheim allows 200 ms, 10 times); 100 caps it at 5. Game time runs slightly slow during such frames. 0 keeps the game's setting. |
 | `[Performance] MaxZonesPerTick` | 1 | New zones generated per zone tick (10 per second), players taking turns. 0 = one per player per tick, as before. |
 | `[Performance] ServerTargetFps` | 60 | Frame rate the server aims for (the game sets 30). With time to spare a frame no longer waits 33 ms, so reactions to players halve; under load it changes nothing. 0 keeps 30. |
-| `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, and the cost of world updates and zone generation while players are online. 0 disables. |
+| `[AdminChat] Enabled` | true | Admins (adminlist.txt) can shout `/give <item> [amount]`, `/save` and `/help`; replies appear in their console (F5). The shout is visible to players nearby. |
+| `[AdminChat] Prefix` / `MaxGiveAmount` | `/` / 1000 | Command prefix; most items one `/give` drops. |
+| `[Performance] StatsIntervalMinutes` | 5 | How often to log FPS, frame times, physics steps per frame, the cost of world updates and zone generation, and what the slowest frame was doing, while players are online. 0 disables. |
 
 ## Hosting notes
 

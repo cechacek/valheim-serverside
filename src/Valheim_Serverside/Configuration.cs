@@ -24,6 +24,10 @@ namespace PluginConfiguration
 		public static ConfigEntry<int> performanceStatsMinutes;
 		public static ConfigEntry<int> serverTargetFps;
 
+		public static ConfigEntry<bool> adminChatEnabled;
+		public static ConfigEntry<string> adminChatPrefix;
+		public static ConfigEntry<int> adminChatMaxGive;
+
 		public static void Load(ConfigFile config)
 		{
 			modEnabled = config.Bind<bool>("General", "Enabled", true, "Enable or disable the mod");
@@ -64,6 +68,13 @@ namespace PluginConfiguration
 					new AcceptableValueRange<int>(0, 240)));
 			performanceStatsMinutes = config.Bind<int>("Performance", "StatsIntervalMinutes", 5,
 				"Every this many minutes, log frame times, physics steps per frame, the cost of sending world updates and of generating zones. 0 disables.");
+
+			adminChatEnabled = config.Bind<bool>("AdminChat", "Enabled", true,
+				"Let admins (adminlist.txt) run commands by shouting them in chat: /give <item> [amount], /save, /help. Valheim 1.0 does not let a player on a dedicated server use spawn from the console, admin or not. Replies go to the sender's console (F5).");
+			adminChatPrefix = config.Bind<string>("AdminChat", "Prefix", "/",
+				"What a chat message must start with to count as a command.");
+			adminChatMaxGive = config.Bind<int>("AdminChat", "MaxGiveAmount", 1000,
+				"Most items one /give may drop.");
 		}
 	}
 }

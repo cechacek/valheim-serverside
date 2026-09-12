@@ -1,3 +1,11 @@
+## [1.8.0] - 2026-09-11
+
+### Added
+
+- `[AdminChat]`: admins listed in adminlist.txt can shout `/give <item> [amount]` (the server drops the items in front of them, stacked as the item allows), `/save` and `/help`; replies go to their console. Valheim 1.0 only lets the host use cheat commands, so `spawn` from the console says "not valid in the current context" on a dedicated server even for admins.
+- The performance log now says what the slowest frame of each period was doing: players' messages, world updates, object creation, zone generation, creature logic, other game updates, saving, and how much was Unity's own work (physics, garbage collection), with the garbage collections that ran in that frame. On the live server a ~300 ms frame showed up almost every 5 minutes without a known cause.
+
+
 ## [1.7.0] - 2026-09-11
 
 ### Added
