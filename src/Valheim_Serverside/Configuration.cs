@@ -50,7 +50,7 @@ namespace PluginConfiguration
 				"Every this many minutes, log per player how often their send queue was full. 0 disables.");
 
 			consoleCommandsEnabled = config.Bind<bool>("Server", "ConsoleCommands", true,
-				"Read `save` and `stop` from standard input, so a server panel can save or shut down cleanly. In AMP set App.ExitMethod=String and App.ExitString=stop. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
+				"Read commands from standard input: save, stop, players, give <item> <amount> <player>. In AMP set App.HasWriteableConsole=True to type them into its console, and App.ExitMethod=String with App.ExitString=stop to shut down cleanly. On Windows also set [Logging.Console] Enabled = false in BepInEx.cfg, or BepInEx's own console takes over standard input.");
 			unityJobWorkers = config.Bind<int>("Server", "UnityJobWorkers", 8,
 				"Upper limit on Unity job worker threads. Unity starts one per CPU core, and on many-core hosts the idle ones still use CPU. Only ever lowers the count. 0 leaves Unity's default.");
 
@@ -69,12 +69,12 @@ namespace PluginConfiguration
 			performanceStatsMinutes = config.Bind<int>("Performance", "StatsIntervalMinutes", 5,
 				"Every this many minutes, log frame times, physics steps per frame, the cost of sending world updates and of generating zones. 0 disables.");
 
-			adminChatEnabled = config.Bind<bool>("AdminChat", "Enabled", true,
-				"Let admins (adminlist.txt) run commands by shouting them in chat: /give <item> [amount], /save, /help. Valheim 1.0 does not let a player on a dedicated server use spawn from the console, admin or not. Replies go to the sender's console (F5).");
+			adminChatEnabled = config.Bind<bool>("AdminChat", "Enabled", false,
+				"Let admins (adminlist.txt) run commands by shouting them in chat: /give <item> [amount], /save, /help; replies go to their console (F5). Valheim 1.0 does not let a player on a dedicated server use spawn from the console, admin or not. Off by default: the server console has the same commands (give <item> <amount> <player>, players, save) for the panel the server runs in.");
 			adminChatPrefix = config.Bind<string>("AdminChat", "Prefix", "/",
 				"What a chat message must start with to count as a command.");
 			adminChatMaxGive = config.Bind<int>("AdminChat", "MaxGiveAmount", 1000,
-				"Most items one /give may drop.");
+				"Most items one give may drop, in chat or on the console.");
 		}
 	}
 }

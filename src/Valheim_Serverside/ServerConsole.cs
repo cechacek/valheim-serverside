@@ -6,7 +6,8 @@ using UnityEngine;
 namespace Valheim_Serverside
 {
 	/*
-		Commands read from the server's standard input: `save` and `stop`.
+		Commands read from the server's standard input: `save`, `stop`, `players`,
+		`give <item> <amount> <player>`.
 
 		A vanilla dedicated server does not read its standard input, so a panel such as AMP can
 		only stop it by closing or killing the process. On Windows that skips the world save on
@@ -25,7 +26,7 @@ namespace Valheim_Serverside
 		{
 			Thread reader = new Thread(ReadLoop) { IsBackground = true, Name = "Dedicated Simulation console" };
 			reader.Start();
-			ServersidePlugin.logger.LogInfo("Console commands enabled on standard input: save, stop");
+			ServersidePlugin.logger.LogInfo("Console commands enabled on standard input: save, stop, players, give <item> <amount> <player>");
 		}
 
 		private static void ReadLoop()
@@ -63,36 +64,53 @@ namespace Valheim_Serverside
 				ServersidePlugin.logger.LogWarning($"Console commands unavailable, cannot read standard input: {command.Substring(1)}");
 				return;
 			}
-			switch (command.ToLowerInvariant())
+			string[] words = command.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+			bool worldLoaded = ZNet.instance && ZNet.instance.IsServer();
+			try
 			{
-				case "save":
-					if (!ZNet.instance || !ZNet.instance.IsServer())
-					{
-						ServersidePlugin.logger.LogInfo("Console: no world loaded, nothing to save");
-					}
-					else if (!ZNet.instance.EnoughDiskSpaceAvailable(out bool _))
-					{
-						ServersidePlugin.logger.LogWarning("Console: not enough disk space, world not saved");
-					}
-					else
-					{
-						// The same call as the server's own autosave (Game.UpdateSaving). The vanilla `save`
-						// command goes through RPC_Save, which throws on a dedicated server when not sent
-						// by a player.
-						ServersidePlugin.logger.LogInfo("Console: saving world");
-						ZNet.instance.Save(sync: false, saveOtherPlayerProfiles: true, waitForNextFrame: true);
-					}
-					break;
-				case "stop":
-				case "quit":
-				case "shutdown":
-					// Quitting runs Game.OnApplicationQuit, which saves the world before shutting down.
-					ServersidePlugin.logger.LogInfo("Console: saving world and shutting down");
-					Application.Quit();
-					break;
-				default:
-					ServersidePlugin.logger.LogInfo($"Console: unknown command '{command}'. Commands: save, stop");
-					break;
+				switch (words[0].ToLowerInvariant())
+				{
+					case "save":
+						ServersidePlugin.logger.LogInfo("Console: " + AdminCommands.Save("console"));
+						break;
+					case "stop":
+					case "quit":
+					case "shutdown":
+						// Quitting runs Game.OnApplicationQuit, which saves the world before shutting down.
+						ServersidePlugin.logger.LogInfo("Console: saving world and shutting down");
+						Application.Quit();
+						break;
+					case "players":
+						ServersidePlugin.logger.LogInfo("Console: " + (worldLoaded ? AdminCommands.Players() : "no world loaded"));
+						break;
+					case "give":
+						// give <item> <amount> <player name, may contain spaces>
+						if (!worldLoaded)
+						{
+							ServersidePlugin.logger.LogInfo("Console: no world loaded");
+						}
+						else if (words.Length < 4 || !AdminCommands.TryParseAmount(words[2], out int amount))
+						{
+							ServersidePlugin.logger.LogInfo("Console: usage: give <item> <amount> <player>, e.g. give Copper 120 Ulf");
+						}
+						else
+						{
+							string name = string.Join(" ", words, 3, words.Length - 3);
+							ZNetPeer target = AdminCommands.FindPlayer(name, out string problem);
+							ServersidePlugin.logger.LogInfo("Console: " + (target == null ? problem : AdminCommands.Give(target, words[1], amount, "console")));
+						}
+						break;
+					case "help":
+						ServersidePlugin.logger.LogInfo("Console: commands: save | stop | players | give <item> <amount> <player>");
+						break;
+					default:
+						ServersidePlugin.logger.LogInfo($"Console: unknown command '{command}'. Commands: save, stop, players, give <item> <amount> <player>");
+						break;
+				}
+			}
+			catch (Exception e)
+			{
+				ServersidePlugin.logger.LogWarning($"Console: '{command}' failed: {e}");
 			}
 		}
 	}

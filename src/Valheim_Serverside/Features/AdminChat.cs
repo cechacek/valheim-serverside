@@ -21,12 +21,11 @@ namespace Valheim_Serverside.Features
 		  /save                   saves the world
 		  /help                   lists these
 
-		The shout itself is still seen by everyone nearby; that is the price of needing nothing on
-		the client.
+		Off by default: the shout is seen by everyone nearby, and the server console (ServerConsole)
+		offers the same commands to whoever runs the server, e.g. from a panel such as AMP.
 	*/
 	public class AdminChat : IFeature
 	{
-		private static Dictionary<string, GameObject> s_items;
 		private static bool s_checked;
 
 		public bool FeatureEnabled()
@@ -123,47 +122,18 @@ namespace Valheim_Serverside.Features
 				Reply(peer, "Usage: give <item> [amount]");
 				return;
 			}
-			GameObject prefab = FindItem(words[1]);
-			if (!prefab)
-			{
-				Reply(peer, $"No item '{words[1]}'.{Suggest(words[1])}");
-				return;
-			}
 			int amount = 1;
-			if (words.Length >= 3 && !int.TryParse(words[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out amount))
+			if (words.Length >= 3 && !AdminCommands.TryParseAmount(words[2], out amount))
 			{
 				Reply(peer, $"'{words[2]}' is not a number");
 				return;
 			}
-			amount = Mathf.Clamp(amount, 1, Mathf.Max(1, Configuration.adminChatMaxGive.Value));
-
-			ZDO character = ZDOMan.instance.GetZDO(peer.m_characterID);
-			Vector3 origin = (character != null ? character.GetPosition() : peer.GetRefPos()) + Vector3.up * 1.5f;
-			int maxStack = Mathf.Max(1, prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_maxStackSize);
-			int stacks = 0;
-			for (int left = amount; left > 0; left -= maxStack)
-			{
-				Vector2 spread = UnityEngine.Random.insideUnitCircle * 0.75f;
-				Vector3 position = origin + new Vector3(spread.x, 0.25f * stacks, spread.y);
-				GameObject go = UnityEngine.Object.Instantiate(prefab, position, Quaternion.identity);
-				go.GetComponent<ItemDrop>().SetStack(Mathf.Min(left, maxStack));
-				stacks++;
-			}
-			ServersidePlugin.logger.LogInfo($"Admin chat: {peer.m_playerName} ({host}) received {amount} x {prefab.name} in {stacks} stack(s) at {origin.x:0},{origin.z:0}");
-			Reply(peer, $"Dropped {amount} x {prefab.name} in {stacks} stack(s)");
+			Reply(peer, AdminCommands.Give(peer, words[1], amount, $"{peer.m_playerName} ({host})"));
 		}
 
 		private static void Save(ZNetPeer peer, string host)
 		{
-			if (!ZNet.instance.EnoughDiskSpaceAvailable(out bool _))
-			{
-				Reply(peer, "Not enough disk space, world not saved");
-				return;
-			}
-			// The same call as the autosave; the vanilla `save` command's path throws on a dedicated server.
-			ServersidePlugin.logger.LogInfo($"Admin chat: {peer.m_playerName} ({host}) requested a world save");
-			ZNet.instance.Save(sync: false, saveOtherPlayerProfiles: true, waitForNextFrame: true);
-			Reply(peer, "Saving world");
+			Reply(peer, AdminCommands.Save($"{peer.m_playerName} ({host})"));
 		}
 
 		private static void Reply(ZNetPeer peer, string text)
@@ -171,37 +141,5 @@ namespace Valheim_Serverside.Features
 			peer.m_rpc.Invoke("RemotePrint", "[server] " + text);
 		}
 
-		private static GameObject FindItem(string name)
-		{
-			if (s_items == null)
-			{
-				s_items = new Dictionary<string, GameObject>(StringComparer.OrdinalIgnoreCase);
-				foreach (GameObject prefab in ZNetScene.instance.m_prefabs)
-				{
-					if (prefab && prefab.GetComponent<ItemDrop>() && !s_items.ContainsKey(prefab.name))
-					{
-						s_items[prefab.name] = prefab;
-					}
-				}
-			}
-			return s_items.TryGetValue(name, out GameObject found) ? found : null;
-		}
-
-		private static string Suggest(string name)
-		{
-			List<string> similar = new List<string>();
-			foreach (string key in s_items.Keys)
-			{
-				if (key.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
-				{
-					similar.Add(key);
-					if (similar.Count == 8)
-					{
-						break;
-					}
-				}
-			}
-			return similar.Count > 0 ? " Similar: " + string.Join(", ", similar) : "";
-		}
 	}
 }
