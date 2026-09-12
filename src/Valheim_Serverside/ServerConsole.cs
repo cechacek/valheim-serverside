@@ -49,6 +49,25 @@ namespace Valheim_Serverside
 			}
 		}
 
+		/*
+			Replies go to the log and to standard output: with BepInEx's console off (needed on
+			Windows for standard input to reach the game) the log is not on standard output, and
+			standard output is what a panel such as AMP shows.
+		*/
+		private static void Reply(string text)
+		{
+			ServersidePlugin.logger.LogInfo("Console: " + text);
+			try
+			{
+				System.Console.Out.WriteLine("Console: " + text);
+				System.Console.Out.Flush();
+			}
+			catch (Exception)
+			{
+				// No standard output; the log has it.
+			}
+		}
+
 		public static void ProcessPending()
 		{
 			while (s_commands.TryDequeue(out string command))
@@ -71,46 +90,47 @@ namespace Valheim_Serverside
 				switch (words[0].ToLowerInvariant())
 				{
 					case "save":
-						ServersidePlugin.logger.LogInfo("Console: " + AdminCommands.Save("console"));
+						Reply(AdminCommands.Save("console"));
 						break;
 					case "stop":
 					case "quit":
 					case "shutdown":
 						// Quitting runs Game.OnApplicationQuit, which saves the world before shutting down.
-						ServersidePlugin.logger.LogInfo("Console: saving world and shutting down");
+						Reply("saving world and shutting down");
 						Application.Quit();
 						break;
 					case "players":
-						ServersidePlugin.logger.LogInfo("Console: " + (worldLoaded ? AdminCommands.Players() : "no world loaded"));
+						Reply(worldLoaded ? AdminCommands.Players() : "no world loaded");
 						break;
 					case "give":
 						// give <item> <amount> <player name, may contain spaces>
 						if (!worldLoaded)
 						{
-							ServersidePlugin.logger.LogInfo("Console: no world loaded");
+							Reply("no world loaded");
 						}
 						else if (words.Length < 4 || !AdminCommands.TryParseAmount(words[2], out int amount))
 						{
-							ServersidePlugin.logger.LogInfo("Console: usage: give <item> <amount> <player>, e.g. give Copper 120 Ulf");
+							Reply("usage: give <item> <amount> <player>, e.g. give Copper 120 Ulf");
 						}
 						else
 						{
 							string name = string.Join(" ", words, 3, words.Length - 3);
 							ZNetPeer target = AdminCommands.FindPlayer(name, out string problem);
-							ServersidePlugin.logger.LogInfo("Console: " + (target == null ? problem : AdminCommands.Give(target, words[1], amount, "console")));
+							Reply(target == null ? problem : AdminCommands.Give(target, words[1], amount, "console"));
 						}
 						break;
 					case "help":
-						ServersidePlugin.logger.LogInfo("Console: commands: save | stop | players | give <item> <amount> <player>");
+						Reply("commands: save | stop | players | give <item> <amount> <player>");
 						break;
 					default:
-						ServersidePlugin.logger.LogInfo($"Console: unknown command '{command}'. Commands: save, stop, players, give <item> <amount> <player>");
+						Reply($"unknown command '{command}'. Commands: save, stop, players, give <item> <amount> <player>");
 						break;
 				}
 			}
 			catch (Exception e)
 			{
 				ServersidePlugin.logger.LogWarning($"Console: '{command}' failed: {e}");
+				Reply($"'{command}' failed: {e.Message}");
 			}
 		}
 	}
